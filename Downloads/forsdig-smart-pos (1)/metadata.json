@@ -1,0 +1,6 @@
+{
+  "name": "ForsDig Smart POS",
+  "description": "Professional Point of Sale (POS) with custom inventory, real-time analytics, and branded customer display interface.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}
