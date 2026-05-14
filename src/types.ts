@@ -1,14 +1,50 @@
-export interface User {
+export interface UserProfile {
   id: string;
-  username: string;
-  password?: string;
+  role: 'admin' | 'user';
+  username?: string;
   fullName?: string;
   email?: string;
   phone?: string;
-  role: 'admin' | 'kasir';
   balance: number;
+  defaultMarkup: number;
+  minMarkup: number;
+  maxMarkup: number;
+  subscriptionStatus: 'active' | 'expired' | 'suspended';
+  packageType: 'FREE' | 'PRO' | 'RESELLER';
+  expiredAt?: string | number;
   status: 'active' | 'blocked';
-  createdAt: number;
+  createdAt: string | number;
+}
+
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  action: string;
+  details?: string;
+  ipAddress?: string;
+  createdAt: string | number;
+}
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  packageType: 'FREE' | 'PRO' | 'RESELLER';
+  amount: number;
+  status: 'pending' | 'success' | 'failed';
+  startDate?: string | number;
+  endDate?: string | number;
+  paymentProof?: string;
+  createdAt: string | number;
+}
+
+export interface UserMarkup {
+  id: string;
+  userId: string;
+  productId?: string;
+  categoryId?: string;
+  categoryName?: string;
+  markup: number;
+  createdAt: string | number;
 }
 
 export interface ApiSettings {
@@ -44,11 +80,12 @@ export interface BroadcastNotification {
   id: string;
   title: string;
   message: string;
-  timestamp: number;
+  timestamp: string | number;
   target: 'all' | 'admin' | 'kasir';
 }
 
 export interface StoreSettings {
+  id?: string;
   name: string;
   address: string;
   phone: string;
@@ -57,6 +94,7 @@ export interface StoreSettings {
   footerMessage: string;
   taxRate: number;
   printerServiceUuid?: string;
+  apiSettings?: ApiSettings[];
   displayConfig?: {
     welcomeText?: string;
     promoTexts?: string[];
@@ -104,13 +142,16 @@ export interface Transaction {
   items: CartItem[];
   subtotal: number;
   tax: number;
+  discount?: number;
   total: number;
   paymentMethod: 'Tunai' | 'QRIS' | 'E-wallet' | 'Transfer' | 'Kartu' | 'Lainnya';
   status: 'pending' | 'success' | 'failed' | 'refunded';
   amountPaid: number;
   change: number;
-  timestamp: number;
+  timestamp: string | number;
   adminFee?: number;
+  staffId?: string;
+  resellerId?: string;
   paymentDetails?: {
     qrId?: string;
     qrName?: string;
@@ -141,6 +182,8 @@ export interface Client {
   address: string;
 }
 
+export type Customer = Client;
+
 export interface PurchaseOrder {
   id: string;
   supplierId: string;
@@ -152,14 +195,14 @@ export interface PurchaseOrder {
   total: number;
   status: 'Pesanan' | 'Diterima' | 'Dibatalkan';
   paymentStatus: 'Lunas' | 'Hutang';
-  timestamp: number;
-  receivedAt?: number;
+  timestamp: string | number;
+  receivedAt?: string | number;
 }
 
 export interface PaymentHistory {
   id: string;
   amount: number;
-  timestamp: number;
+  timestamp: string | number;
   note?: string;
 }
 
@@ -170,10 +213,10 @@ export interface DebtReceivable {
   type: 'Hutang' | 'Piutang';
   amount: number;
   remainingAmount: number;
-  dueDate: number;
+  dueDate: string | number;
   status: 'Belum Lunas' | 'Lunas';
   referenceId: string; // Transaction ID or PurchaseOrder ID
-  timestamp: number;
+  timestamp: string | number;
   payments?: PaymentHistory[];
 }
 
@@ -181,36 +224,40 @@ export type PPOBCategory = 'PLN' | 'Pulsa' | 'Paket Data' | 'PDAM' | 'BPJS' | 'E
 
 export interface PPOBService {
   id: string;
-  category: PPOBCategory;
-  code: string; // SKU code from Tripay
+  category: string;
+  code: string; 
   name: string;
-  provider: string; // Tripay or others
+  provider: string;
   basePrice: number;
-  markupPrice: number;
-  adminFee: number;
+  adminMarkup: number;
+  markupPrice?: number; // legacy/calculated
+  adminFee?: number; // calculated
+  sellingPrice: number;
   isActive: boolean;
-  desc?: string;
+  description?: string;
+  updatedAt: string | number;
 }
 
 export interface PPOBTransaction {
   id: string;
   userId: string;
-  outletId: string;
-  serviceId: string;
-  customerNumber: string;
-  productName: string;
-  productCode: string;
-  amount: number; // base price
-  markup: number;
-  adminFee: number;
-  total: number;
+  productId: string;
+  productCode?: string;
+  productName?: string;
+  customerNumber?: string;
+  amount?: number; // base price
+  markup?: number; // user markup
+  adminFee?: number;
+  total?: number; // selling price
+  sellingPrice: number;
+  profitAdmin: number;
+  profitUser: number;
   status: 'pending' | 'success' | 'failed' | 'canceled';
-  reference?: string; // Tripay reference
-  sn?: string; // Serial Number / Token
-  timestamp: number;
-  updatedAt?: number;
-  paymentMethod: string;
-  notes?: string;
+  reference?: string;
+  sn?: string;
+  details?: any;
+  timestamp?: number;
+  createdAt: string | number;
 }
 
 export interface BalanceMutation {
@@ -222,7 +269,8 @@ export interface BalanceMutation {
   referenceId?: string; // Transaction ID or Topup ID
   previousBalance: number;
   currentBalance: number;
-  timestamp: number;
+  timestamp: string | number;
+  userName?: string;
 }
 
 export interface Outlet {
@@ -231,5 +279,53 @@ export interface Outlet {
   address: string;
   phone: string;
   adminId: string; // Owner of the outlet
-  createdAt: number;
+  createdAt: string | number;
+}
+
+export interface Voucher {
+  id: string;
+  code: string;
+  type: 'percentage' | 'fixed';
+  value: number;
+  maxDiscount?: number;
+  minPurchase: number;
+  expiryDate?: string | number;
+  usageLimit: number;
+  usageCount: number;
+  status: 'active' | 'expired' | 'disabled';
+  createdAt: string | number;
+}
+
+export interface Staff {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  role?: string;
+  baseSalary: number;
+  commissionRate: number; // Percentage
+  status: 'active' | 'inactive';
+  createdAt: string | number;
+}
+
+export interface Reseller {
+  id: string;
+  name: string;
+  platform?: string;
+  contactInfo?: string;
+  commissionRate: number; // Percentage
+  status: 'active' | 'inactive';
+  createdAt: string | number;
+}
+
+export interface Commission {
+  id: string;
+  staffId?: string;
+  resellerId?: string;
+  transactionId: string;
+  amount: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  createdAt: string | number;
+  staffName?: string;
+  resellerName?: string;
 }

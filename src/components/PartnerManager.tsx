@@ -26,7 +26,7 @@ import {
   Download
 } from 'lucide-react';
 import { Supplier, Client, PurchaseOrder, DebtReceivable, Product, StoreSettings, Transaction } from '../types';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, generateUUID } from '../lib/utils';
 import { format } from 'date-fns';
 import { exportPurchaseOrderToPDF } from '../lib/exportUtils';
 
@@ -114,7 +114,7 @@ export default function PartnerManager({
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const id = Math.random().toString(36).substr(2, 9).toUpperCase();
+    const id = generateUUID();
 
     if (activeSubTab === 'suppliers') {
       onAddSupplier({
@@ -136,13 +136,13 @@ export default function PartnerManager({
     } else if (activeSubTab === 'purchases') {
       const total = formData.items.reduce((sum, item) => sum + (item.quantity * item.costPrice), 0);
       onAddPurchase({
-        id: `PO-${id}`,
+        id: generateUUID(),
         supplierId: formData.supplierId,
         items: formData.items,
         total,
         status: 'Pesanan',
         paymentStatus: formData.paymentStatus,
-        timestamp: Date.now()
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -165,9 +165,9 @@ export default function PartnerManager({
     if (isNaN(amount) || amount <= 0 || amount > selectedDebt.remainingAmount) return;
 
     const newPayment = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: generateUUID(),
       amount,
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       note: paymentNote
     };
 
@@ -736,9 +736,9 @@ export default function PartnerManager({
                       </td>
                       <td className="px-6 py-4">
                         <div className={`text-xs font-bold ${
-                          d.status === 'Belum Lunas' && d.dueDate < Date.now() ? 'text-red-600 animate-pulse' : 'text-slate-500'
+                          d.status === 'Belum Lunas' && new Date(d.dueDate).getTime() < Date.now() ? 'text-red-600 animate-pulse' : 'text-slate-500'
                         }`}>
-                          {format(d.dueDate, 'dd MMM yyyy')}
+                          {format(new Date(d.dueDate), 'dd MMM yyyy')}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -863,8 +863,8 @@ export default function PartnerManager({
                        </div>
                        <div className="space-y-1 text-right">
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Jatuh Tempo</p>
-                          <p className={`text-xs font-bold ${d.status === 'Belum Lunas' && d.dueDate < Date.now() ? 'text-red-600 animate-pulse' : 'text-slate-500'}`}>
-                            {format(d.dueDate, 'dd MMM yyyy')}
+                          <p className={`text-xs font-bold ${d.status === 'Belum Lunas' && new Date(d.dueDate).getTime() < Date.now() ? 'text-red-600 animate-pulse' : 'text-slate-500'}`}>
+                            {format(new Date(d.dueDate), 'dd MMM yyyy')}
                           </p>
                        </div>
                     </div>

@@ -11,7 +11,7 @@ interface RecentTransactionsPOSProps {
 }
 
 export default function RecentTransactionsPOS({ transactions, onViewReceipt, onViewInvoice }: RecentTransactionsPOSProps) {
-  const recentTransactions = [...transactions].sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
+  const recentTransactions = [...transactions].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 20);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6 pb-24 md:pb-6">
@@ -53,7 +53,7 @@ export default function RecentTransactionsPOS({ transactions, onViewReceipt, onV
                     </span>
                   </div>
                   <div className="text-xs font-bold text-slate-800 line-clamp-1">
-                    {t.items.length} Barang • {t.items[0].name}{t.items.length > 1 ? '...' : ''}
+                    {t.items.length} Barang • {t.items[0]?.name || 'Tanpa Item'}{t.items.length > 1 ? '...' : ''}
                   </div>
                   <div className="flex items-center gap-3 mt-1">
                     <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold">

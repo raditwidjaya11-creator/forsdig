@@ -1,9 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Printer, X, CheckCircle2, Download, Smartphone, Zap, Wallet } from 'lucide-react';
+import { Printer, X, CheckCircle2, Download, Smartphone, Zap, Wallet, Copy, Check } from 'lucide-react';
 import { PPOBTransaction, StoreSettings } from '../../types';
 import { formatCurrency } from '../../lib/utils';
 import { format } from 'date-fns';
+import { formatReceipt } from '../../lib/receiptFormatter';
+import { toast } from 'sonner';
 
 interface PPOBReceiptProps {
   transaction: PPOBTransaction;
@@ -13,6 +15,40 @@ interface PPOBReceiptProps {
 
 export default function PPOBReceipt({ transaction, storeSettings, onClose }: PPOBReceiptProps) {
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  const rawReceipt = formatReceipt({
+    storeName: storeSettings.name,
+    address: storeSettings.address,
+    items: [
+      {
+        name: transaction.productName || 'Layanan PPOB',
+        qty: 1,
+        price: (transaction.sellingPrice || 0) - (transaction.profitAdmin || 0),
+        subtotal: (transaction.sellingPrice || 0) - (transaction.profitAdmin || 0)
+      },
+      {
+        name: 'Biaya Admin',
+        qty: 1,
+        price: transaction.profitAdmin || 0,
+        subtotal: transaction.profitAdmin || 0
+      }
+    ],
+    subtotal: transaction.sellingPrice || 0,
+    discount: 0,
+    total: transaction.sellingPrice || 0,
+    payment: transaction.sellingPrice || 0,
+    change: 0,
+    date: format(new Date(transaction.createdAt || Date.now()), 'dd/MM/yy HH:mm'),
+    transactionId: transaction.reference || transaction.id
+  }, 32);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(rawReceipt);
+    setCopied(true);
+    toast.success('Struk disalin ke clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handlePrint = () => {
     const printContent = receiptRef.current;
@@ -92,11 +128,11 @@ export default function PPOBReceipt({ transaction, storeSettings, onClose }: PPO
             <div className="space-y-1">
               <div className="flex justify-between">
                 <span>Waktu:</span>
-                <span className="text-right">{format(transaction.timestamp, 'dd/MM/yy HH:mm')}</span>
+                <span className="text-right">{format(new Date(transaction.createdAt || Date.now()), 'dd/MM/yy HH:mm')}</span>
               </div>
               <div className="flex justify-between">
                 <span>No. Ref:</span>
-                <span className="text-right">{transaction.reference}</span>
+                <span className="text-right">{transaction.reference || transaction.id.slice(0, 8)}</span>
               </div>
             </div>
 
@@ -104,7 +140,7 @@ export default function PPOBReceipt({ transaction, storeSettings, onClose }: PPO
 
             <div className="space-y-2">
               <div className="font-bold text-center uppercase tracking-wider bg-slate-50 py-2 rounded-xl mb-2">
-                {transaction.productName}
+                {transaction.productName || 'Transaksi PPOB'}
               </div>
               <div className="flex justify-between">
                 <span>No. Tujuan:</span>
@@ -124,15 +160,15 @@ export default function PPOBReceipt({ transaction, storeSettings, onClose }: PPO
             <div className="space-y-1">
               <div className="flex justify-between">
                 <span>Harga:</span>
-                <span>{formatCurrency(transaction.amount + transaction.markup)}</span>
+                <span>{formatCurrency((transaction.sellingPrice || 0) - (transaction.profitAdmin || 0))}</span>
               </div>
               <div className="flex justify-between">
                 <span>Biaya Admin:</span>
-                <span>{formatCurrency(transaction.adminFee)}</span>
+                <span>{formatCurrency(transaction.profitAdmin || 0)}</span>
               </div>
               <div className="flex justify-between font-extrabold text-[13px] pt-1">
                 <span>TOTAL:</span>
-                <span>{formatCurrency(transaction.total)}</span>
+                <span>{formatCurrency(transaction.sellingPrice || 0)}</span>
               </div>
             </div>
 
@@ -146,16 +182,23 @@ export default function PPOBReceipt({ transaction, storeSettings, onClose }: PPO
           </div>
         </div>
 
-        <div className="p-8 bg-white border-t border-slate-100 flex gap-4">
+        <div className="p-8 bg-white border-t border-slate-100 flex flex-wrap gap-4">
           <button 
             onClick={onClose}
-            className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all text-sm"
+            className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all text-sm min-w-[120px]"
           >
-            Selesai
+            Tutup
+          </button>
+          <button 
+            onClick={handleCopy}
+            className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-slate-900 transition-all text-sm flex items-center justify-center gap-2 min-w-[120px]"
+          >
+            {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+            Salin Teks
           </button>
           <button 
             onClick={handlePrint}
-            className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 text-sm flex items-center justify-center gap-2"
+            className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 text-sm flex items-center justify-center gap-2 min-w-[120px]"
           >
             <Printer className="w-5 h-5" />
             Cetak Struk

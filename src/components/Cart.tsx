@@ -1,16 +1,22 @@
 import React, { useState, memo, useMemo } from 'react';
-import { Product } from '../types';
-import { Plus, Minus, Trash2, ShoppingCart, CreditCard, Keyboard } from 'lucide-react';
+import { Product, Voucher } from '../types';
+import { Plus, Minus, Trash2, ShoppingCart, CreditCard, Keyboard, Ticket, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from '../lib/utils';
+import { toast } from 'sonner';
 
 interface CartProps {
   items: (Product & { quantity: number })[];
   taxRate: number;
+  discount: number;
+  vouchers?: Voucher[];
+  appliedVoucherCode?: string | null;
   onUpdateQuantity: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
   onAddManual: (price: number) => void;
+  onUpdateDiscount: (value: number) => void;
+  onApplyVoucher: (code: string | null) => void;
 }
 
 const CartItem = memo(({ item, onUpdateQuantity, onRemove }: { item: Product & { quantity: number }, onUpdateQuantity: (id: string, delta: number) => void, onRemove: (id: string) => void }) => (
@@ -57,16 +63,81 @@ const CartItem = memo(({ item, onUpdateQuantity, onRemove }: { item: Product & {
   </motion.div>
 ));
 
-export default function Cart({ items, taxRate, onUpdateQuantity, onRemove, onCheckout, onAddManual }: CartProps) {
+export default function Cart({ 
+  items, 
+  taxRate, 
+  discount, 
+  vouchers = [], 
+  appliedVoucherCode = null,
+  onUpdateQuantity, 
+  onRemove, 
+  onCheckout, 
+  onAddManual, 
+  onUpdateDiscount,
+  onApplyVoucher
+}: CartProps) {
   const [manualPrice, setManualPrice] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [showVoucher, setShowVoucher] = useState(false);
+  const [tempDiscount, setTempDiscount] = useState(discount.toString());
+  const [voucherCode, setVoucherCode] = useState('');
+
+  const appliedVoucher = useMemo(() => 
+    appliedVoucherCode ? vouchers.find(v => v.code.toUpperCase() === appliedVoucherCode.toUpperCase()) : null
+  , [appliedVoucherCode, vouchers]);
 
   const subtotal = useMemo(() => items.reduce((acc, item) => acc + item.price * item.quantity, 0), [items]);
-  const tax = useMemo(() => subtotal * (taxRate / 100), [subtotal, taxRate]);
-  const total = useMemo(() => subtotal + tax, [subtotal, tax]);
-
+  
   const handleUpdateQuantity = React.useCallback((id: string, delta: number) => onUpdateQuantity(id, delta), [onUpdateQuantity]);
   const handleRemove = React.useCallback((id: string) => onRemove(id), [onRemove]);
+
+  const handleApplyVoucher = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!voucherCode) return;
+
+    const voucher = vouchers.find(v => v.code.toUpperCase() === voucherCode.toUpperCase());
+    
+    if (!voucher) {
+      toast.error('Voucher tidak ditemukan');
+      return;
+    }
+
+    if (voucher.status !== 'active') {
+      toast.error('Voucher sudah tidak aktif');
+      return;
+    }
+
+    if (voucher.expiryDate && new Date(voucher.expiryDate).getTime() < Date.now()) {
+      toast.error('Voucher sudah kadaluarsa');
+      return;
+    }
+
+    if (voucher.usageCount >= voucher.usageLimit) {
+      toast.error('Limit penggunaan voucher telah habis');
+      return;
+    }
+
+    if (subtotal < voucher.minPurchase) {
+      toast.error(`Minimal belanja ${formatCurrency(voucher.minPurchase)} untuk menggunakan voucher ini`);
+      return;
+    }
+
+    let discountAmount = 0;
+    if (voucher.type === 'percentage') {
+      discountAmount = (subtotal * voucher.value) / 100;
+      if (voucher.maxDiscount && discountAmount > voucher.maxDiscount) {
+        discountAmount = voucher.maxDiscount;
+      }
+    } else {
+      discountAmount = voucher.value;
+    }
+
+    onUpdateDiscount(Math.min(discountAmount, subtotal));
+    onApplyVoucher(voucher.code);
+    setTempDiscount(discountAmount.toString());
+    toast.success(`Voucher ${voucher.code} berhasil digunakan!`);
+  };
 
   const handleManualAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +149,10 @@ export default function Cart({ items, taxRate, onUpdateQuantity, onRemove, onChe
     }
   };
 
+  const discountedSubtotal = useMemo(() => Math.max(0, subtotal - discount), [subtotal, discount]);
+  const tax = useMemo(() => discountedSubtotal * (taxRate / 100), [discountedSubtotal, taxRate]);
+  const total = useMemo(() => discountedSubtotal + tax, [discountedSubtotal, tax]);
+
   return (
     <div className="h-full flex flex-col bg-white border-l border-slate-200 shadow-lg">
       <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
@@ -86,7 +161,35 @@ export default function Cart({ items, taxRate, onUpdateQuantity, onRemove, onChe
         </h2>
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => setShowManual(!showManual)}
+            onClick={() => {
+              setShowDiscount(!showDiscount);
+              if (showManual) setShowManual(false);
+              if (showVoucher) setShowVoucher(false);
+            }}
+            className={`p-1.5 rounded-lg transition-colors border border-transparent ${discount > 0 ? 'bg-orange-50 text-orange-600 border-orange-100' : 'hover:bg-orange-50 text-orange-600 hover:border-orange-100'}`}
+            title="Tambah Diskon Manual"
+          >
+            <div className="flex items-center gap-1">
+              <span className="text-[14px] font-bold">%</span>
+            </div>
+          </button>
+          <button 
+            onClick={() => {
+              setShowVoucher(!showVoucher);
+              if (showManual) setShowManual(false);
+              if (showDiscount) setShowDiscount(false);
+            }}
+            className={`p-1.5 rounded-lg transition-colors border border-transparent ${appliedVoucher ? 'bg-blue-50 text-blue-600 border-blue-100' : 'hover:bg-blue-50 text-blue-600 hover:border-blue-100'}`}
+            title="Gunakan Voucher"
+          >
+            <Ticket size={18} />
+          </button>
+          <button 
+            onClick={() => {
+              setShowManual(!showManual);
+              if (showDiscount) setShowDiscount(false);
+              if (showVoucher) setShowVoucher(false);
+            }}
             className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors border border-transparent hover:border-red-100"
             title="Tambah Barang Manual"
           >
@@ -97,6 +200,89 @@ export default function Cart({ items, taxRate, onUpdateQuantity, onRemove, onChe
           </span>
         </div>
       </div>
+
+      {showDiscount && (
+        <motion.div 
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          className="p-4 bg-orange-50/50 border-b border-orange-100 space-y-2 overflow-hidden"
+        >
+          <label className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Diskon Manual (Rp)</label>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              type="number"
+              value={tempDiscount}
+              onChange={(e) => {
+                setTempDiscount(e.target.value);
+                const val = Number(e.target.value);
+                if (!isNaN(val) && val >= 0) {
+                  onUpdateDiscount(val);
+                }
+                onApplyVoucher(null);
+              }}
+              placeholder="0"
+              className="flex-1 px-3 py-2 bg-white border border-orange-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold"
+            />
+            <button 
+              onClick={() => {
+                onUpdateDiscount(0);
+                setTempDiscount('0');
+                onApplyVoucher(null);
+                setShowDiscount(false);
+              }}
+              className="px-3 text-orange-600 font-bold text-xs"
+            >
+              Reset
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {showVoucher && (
+        <motion.div 
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          className="p-4 bg-blue-50/50 border-b border-blue-100 space-y-2 overflow-hidden"
+        >
+          <label className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Kode Voucher</label>
+          <form onSubmit={handleApplyVoucher} className="flex gap-2">
+            <div className="flex-1 relative">
+              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300" size={14} />
+              <input
+                autoFocus
+                type="text"
+                value={voucherCode}
+                onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                placeholder="PROMO2024"
+                className="w-full pl-9 pr-3 py-2 bg-white border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold tracking-widest uppercase"
+              />
+            </div>
+            <button 
+              type="submit"
+              className="px-4 bg-blue-600 text-white rounded-lg font-bold text-sm"
+            >
+              Gunakan
+            </button>
+          </form>
+          {appliedVoucher && (
+            <div className="flex items-center justify-between mt-1 px-1">
+              <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Voucher: {appliedVoucher.code}</span>
+              <button 
+                onClick={() => {
+                  onApplyVoucher(null);
+                  onUpdateDiscount(0);
+                  setTempDiscount('0');
+                  setVoucherCode('');
+                }}
+                className="text-[10px] font-black text-red-500 uppercase"
+              >
+                Hapus
+              </button>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {showManual && (
         <motion.form 
@@ -150,6 +336,12 @@ export default function Cart({ items, taxRate, onUpdateQuantity, onRemove, onChe
             <span>Subtotal</span>
             <span>{formatCurrency(subtotal)}</span>
           </div>
+          {discount > 0 && (
+            <div className="flex justify-between text-xs text-orange-600 font-medium">
+              <span>Diskon</span>
+              <span>-{formatCurrency(discount)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-xs text-slate-500 font-medium">
             <span>Pajak (PPN {taxRate}%)</span>
             <span>{formatCurrency(tax)}</span>

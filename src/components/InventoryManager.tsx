@@ -1,8 +1,8 @@
-import React, { useState, useRef, memo } from 'react';
+import React, { useState, useRef, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Edit2, Trash2, Save, X, Search, Package, AlertTriangle, CheckCircle2, XCircle, Upload, Download, FileText, Info, Scan, Printer, Check } from 'lucide-react';
 import { Product, StoreSettings, Category } from '../types';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, generateUUID } from '../lib/utils';
 import { CATEGORIES } from '../constants';
 import Papa from 'papaparse';
 import BarcodeScanner from './BarcodeScanner';
@@ -157,18 +157,33 @@ export default function InventoryManager({
   const [customUnit, setCustomUnit] = useState('');
   const [isCustomUnit, setIsCustomUnit] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannerTarget, setScannerTarget] = useState<'search' | 'sku'>('search');
   const [selectedForBarcode, setSelectedForBarcode] = useState<Product[]>([]);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const scannerTargetRef = useRef<'search' | 'sku'>('search');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const skuInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const openForm = useCallback((product?: Product) => {
+    if (product) {
+      setEditingProduct(product);
+      setPreviewImage(product.image);
+      if (PRODUCT_UNITS.includes(product.unit)) {
+        setSelectedUnit(product.unit);
+        setIsCustomUnit(false);
+      } else {
+        setSelectedUnit('custom');
+        setCustomUnit(product.unit);
+        setIsCustomUnit(true);
+      }
+    } else {
+      setIsAdding(true);
+      setPreviewImage(null);
+      setSelectedUnit('pcs');
+      setIsCustomUnit(false);
+    }
+  }, []);
 
-  const handleToggleBarcode = React.useCallback((product: Product) => {
+  const handleToggleBarcode = useCallback((product: Product) => {
     setSelectedForBarcode(prev => {
       if (prev.some(p => p.id === product.id)) {
         return prev.filter(p => p.id !== product.id);
@@ -178,13 +193,18 @@ export default function InventoryManager({
     });
   }, []);
 
-  const handleOpenForm = React.useCallback((product: Product) => {
+  const handleOpenForm = useCallback((product: Product) => {
     openForm(product);
-  }, []);
+  }, [openForm]);
 
-  const handleDelete = React.useCallback((id: string) => {
+  const handleDelete = useCallback((id: string) => {
     onDelete(id);
   }, [onDelete]);
+
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -278,9 +298,9 @@ export default function InventoryManager({
   };
 
   const handleScan = (sku: string) => {
-    if (scannerTarget === 'search') {
+    if (scannerTargetRef.current === 'search') {
       setSearchTerm(sku);
-    } else if (scannerTarget === 'sku') {
+    } else if (scannerTargetRef.current === 'sku') {
       if (skuInputRef.current) {
         skuInputRef.current.value = sku;
       }
@@ -288,25 +308,6 @@ export default function InventoryManager({
     setIsScannerOpen(false);
   };
 
-  const openForm = (product?: Product) => {
-    if (product) {
-      setEditingProduct(product);
-      setPreviewImage(product.image);
-      if (PRODUCT_UNITS.includes(product.unit)) {
-        setSelectedUnit(product.unit);
-        setIsCustomUnit(false);
-      } else {
-        setSelectedUnit('custom');
-        setCustomUnit(product.unit);
-        setIsCustomUnit(true);
-      }
-    } else {
-      setIsAdding(true);
-      setPreviewImage(null);
-      setSelectedUnit('pcs');
-      setIsCustomUnit(false);
-    }
-  };
 
   return (
     <div className="p-4 md:p-8 pb-32 md:pb-8">
@@ -365,7 +366,7 @@ export default function InventoryManager({
         </div>
         <button
           onClick={() => {
-            setScannerTarget('search');
+            scannerTargetRef.current = 'search';
             setIsScannerOpen(true);
           }}
           className="px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:text-red-600 hover:bg-red-50 transition-all shadow-sm flex items-center gap-2"
@@ -465,7 +466,7 @@ export default function InventoryManager({
                     <button
                       type="button"
                       onClick={() => {
-                        setScannerTarget('sku');
+                        scannerTargetRef.current = 'sku';
                         setIsScannerOpen(true);
                       }}
                       className="px-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all active:scale-95"
@@ -810,7 +811,7 @@ export default function InventoryManager({
                         setEditingCategory(null);
                       } else {
                         const newCategory: Category = {
-                          id: `CAT-${Date.now()}`,
+                          id: generateUUID(),
                           name: newCategoryName
                         };
                         onUpdateCategories([...categories, newCategory]);
@@ -844,7 +845,7 @@ export default function InventoryManager({
                     <div key={c.id} className="flex items-center justify-between py-3 group">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-xs">
-                          {c.name[0].toUpperCase()}
+                          {(c.name?.[0] || 'C').toUpperCase()}
                         </div>
                         <div>
                           <p className="text-sm font-bold text-slate-800">{c.name}</p>

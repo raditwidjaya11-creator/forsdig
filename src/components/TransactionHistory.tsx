@@ -207,9 +207,9 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
         </div>
       </div>
 
-      <div className="flex flex-row overflow-x-auto gap-4 pb-4 mb-8 md:mb-12 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-5 lg:gap-4">
+      <div className="flex flex-row overflow-x-auto gap-3 md:gap-4 pb-4 mb-8 md:mb-12 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-5 lg:gap-4">
         <DashboardCard 
-          title="Penjualan Kotor" 
+          title="Sales" 
           value={formatCurrency(stats.totalSales)} 
           icon={DollarSign} 
           variant="white"
@@ -227,13 +227,13 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
           variant="green"
         />
         <DashboardCard 
-          title="Rata-rata Transaksi" 
+          title="Rata-rata" 
           value={formatCurrency(stats.averageTicket)} 
           icon={Target} 
           variant="blue"
         />
         <DashboardCard 
-          title="Total Pajak" 
+          title="Pajak" 
           value={formatCurrency(stats.totalTax)} 
           icon={Percent} 
           variant="purple"
@@ -241,14 +241,14 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mb-8">
-        <div className="lg:col-span-2 bg-white p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div className="lg:col-span-2 bg-white p-5 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-6 sm:mb-8 text-center sm:text-left">
             <div>
               <h2 className="text-lg sm:text-xl font-bold">Analisis Keuntungan</h2>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Laba Kotor vs Bersih ({period})</p>
             </div>
           </div>
-          <div className="h-64 sm:h-80 w-full overflow-hidden">
+          <div className="h-48 sm:h-80 w-full overflow-hidden">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
@@ -373,7 +373,7 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
           </div>
         </div>
 
-        <div className="bg-white p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div className="bg-white p-5 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-6 sm:mb-8 text-center sm:text-left">
             <div>
               <h2 className="text-lg sm:text-xl font-bold">Riwayat {period === 'daily' ? 'Hari Ini' : 'Periode Ini'}</h2>
@@ -386,51 +386,43 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
           
           <div className="space-y-3 lg:overflow-visible scrollbar-hide pr-1">
             {[...filteredTransactions].reverse().map((t) => (
-              <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-transparent hover:border-slate-100 transition-all group">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center font-bold text-xs shadow-sm group-hover:scale-110 transition-transform">
-                    {t.paymentMethod[0]}
+              <div key={t.id} className="flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-slate-50 border border-transparent hover:border-slate-100 transition-all group">
+                <div className="flex items-center gap-2 md:gap-4">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white flex items-center justify-center font-bold text-[10px] md:text-xs shadow-sm group-hover:scale-110 transition-transform shrink-0">
+                    {t.paymentMethod?.[0] || 'P'}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <div className="font-bold text-sm">#{t.id.slice(-6)}</div>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <div className="font-bold text-xs md:text-sm truncate">#{t.id.slice(-6)}</div>
+                      <span className={`px-1 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-tighter shrink-0 ${
                         t.status === 'success' ? 'bg-green-50 text-green-600' :
                         t.status === 'pending' ? 'bg-amber-50 text-amber-600' :
                         'bg-red-50 text-red-600'
                       }`}>
                         {t.status}
                       </span>
-                      {t.status === 'pending' && onUpdateTransaction && (
-                        <button
-                          onClick={() => onUpdateTransaction({ ...t, status: 'success' })}
-                          className="px-2 py-0.5 bg-green-600 text-white rounded text-[8px] font-black uppercase tracking-tighter hover:bg-green-700 transition-colors"
-                        >
-                          LUNASKAN
-                        </button>
-                      )}
                     </div>
-                    <div className="text-[10px] text-slate-400 font-medium">
-                      {format(new Date(t.timestamp), 'dd MMM, HH:mm')} • {t.paymentMethod}
+                    <div className="text-[9px] md:text-[10px] text-slate-400 font-medium truncate">
+                      {format(new Date(t.timestamp), 'dd MMM, HH:mm')}
                     </div>
                   </div>
                 </div>
-                <div className="text-right flex items-center gap-4">
-                  <div>
-                    <div className="font-bold text-red-600 truncate">{formatCurrency(t.total)}</div>
-                    <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-slate-300'}`} />
-                      <span className={`text-[9px] font-bold uppercase tracking-tighter ${isOnline ? 'text-green-600' : 'text-slate-400'}`}>
-                        {isOnline ? 'Sinkron' : 'Lokal'}
+                <div className="text-right flex items-center gap-2 md:gap-4 shrink-0">
+                  <div className="text-right">
+                    <div className="font-bold text-xs md:text-base text-red-600 truncate">{formatCurrency(t.total)}</div>
+                    <div className="flex items-center justify-end gap-1 mt-0.5">
+                      <div className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-slate-300'}`} />
+                      <span className={`text-[8px] md:text-[9px] font-bold uppercase tracking-tighter ${isOnline ? 'text-green-600' : 'text-slate-400'}`}>
+                        {isOnline ? 'On' : 'Off'}
                       </span>
                     </div>
                   </div>
                   <button 
                     onClick={() => setSelectedInvoice(t)}
-                    className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-red-600 hover:border-red-100 transition-all shadow-sm"
+                    className="p-1.5 md:p-2.5 bg-white border border-slate-200 rounded-lg md:rounded-xl text-slate-400 hover:text-red-600 hover:border-red-100 transition-all shadow-sm"
                     title="Cetak Invoice A4"
                   >
-                    <FileText size={16} />
+                    <FileText size={14} className="md:w-4 md:h-4" />
                   </button>
                 </div>
               </div>

@@ -1,12 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL?.trim().replace(/\/$/, '').replace(/\/rest\/v1$/, '').replace(/\/auth\/v1$/, '');
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY?.trim();
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl !== '' && supabaseAnonKey !== '' && !supabaseUrl.includes('placeholder'));
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== '' && 
+  supabaseAnonKey !== '' && 
+  !supabaseUrl.includes('placeholder')
+);
 
 if (!isSupabaseConfigured) {
-  console.warn('Supabase configuration missing or invalid! Database features will be disabled. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.');
+  console.error('Supabase configuration missing or invalid! Database features will be disabled. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.');
 }
 
 export const supabase = createClient(
@@ -21,4 +27,4 @@ export const supabase = createClient(
   }
 );
 
-export type DbTable = 'products' | 'transactions' | 'suppliers' | 'clients' | 'purchase_orders' | 'debts' | 'ppob_transactions' | 'ppob_services' | 'store_settings' | 'payment_qrs' | 'outlets' | 'balance_mutations' | 'profiles';
+export type DbTable = 'products' | 'transactions' | 'suppliers' | 'customers' | 'purchase_orders' | 'debts' | 'ppob_transactions' | 'ppob_services' | 'store_settings' | 'qris' | 'outlets' | 'balance_mutations' | 'profiles' | 'categories' | 'vouchers' | 'staff' | 'resellers' | 'commissions' | 'user_markups' | 'subscriptions' | 'activity_logs';

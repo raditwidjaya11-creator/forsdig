@@ -1,20 +1,25 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CreditCard, Banknote, QrCode, Wallet, CheckCircle2, ScanLine, ArrowLeftRight, ChevronRight, Check, Activity } from 'lucide-react';
-import { formatCurrency } from '../lib/utils';
+import { X, CreditCard, Banknote, QrCode, Wallet, CheckCircle2, ScanLine, ArrowLeftRight, ChevronRight, Check, Activity, Users, Globe } from 'lucide-react';
+import { formatCurrency, cn } from '../lib/utils';
 import confetti from 'canvas-confetti';
-import { CartItem, PaymentQR } from '../types';
+import { CartItem, PaymentQR, Staff, Reseller } from '../types';
+import { useStaffResellerStore } from '../services/staffResellerStore';
 
 interface PaymentModalProps {
   total: number;
+  subtotal: number;
+  discount: number;
   items: CartItem[];
   paymentQrs: PaymentQR[];
   storeSettings: any;
   onClose: () => void;
-  onSuccess: (method: string, amountPaid: number, details?: any, status?: 'success' | 'pending') => void;
+  onSuccess: (method: string, amountPaid: number, details?: any, status?: 'success' | 'pending', staffId?: string, resellerId?: string) => void;
 }
 
-export default function PaymentModal({ total, items, paymentQrs, storeSettings, onClose, onSuccess }: PaymentModalProps) {
+export default function PaymentModal({ total, subtotal, discount, items, paymentQrs, storeSettings, onClose, onSuccess }: PaymentModalProps) {
+  const staffs = useStaffResellerStore(state => state.staffs);
+  const resellers = useStaffResellerStore(state => state.resellers);
   const [method, setMethod] = useState<'Tunai' | 'QRIS' | 'E-wallet' | 'Transfer' | 'Kartu' | 'Lainnya'>('Tunai');
   const [selectedQR, setSelectedQR] = useState<PaymentQR | null>(null);
   const [paymentMode, setPaymentMode] = useState<'Manual' | 'Semi-Otomatik' | 'Otomatis'>('Otomatis');
@@ -25,13 +30,18 @@ export default function PaymentModal({ total, items, paymentQrs, storeSettings, 
   const [scanProgress, setScanProgress] = useState(0);
   const [paymentDetected, setPaymentDetected] = useState<boolean>(false);
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | undefined>();
+  const [selectedResellerId, setSelectedResellerId] = useState<string | undefined>();
+  const [activeRightTab, setActiveRightTab] = useState<'pembayaran' | 'komisi'>('pembayaran');
 
   useEffect(() => {
+    if (!storeSettings) return;
+    
     const channel = new BroadcastChannel('pos_customer_display');
     const commonData = {
-      config: storeSettings.displayConfig,
-      storeName: storeSettings.name,
-      storeLogo: storeSettings.logo
+      config: storeSettings?.displayConfig,
+      storeName: storeSettings?.name,
+      storeLogo: storeSettings?.logo
     };
 
     if (isSuccess) {
@@ -139,7 +149,14 @@ export default function PaymentModal({ total, items, paymentQrs, storeSettings, 
     const status = paymentMode === 'Semi-Otomatik' ? 'pending' : 'success';
 
     setTimeout(() => {
-      onSuccess(method, Number(method === 'Tunai' ? amountPaid : total), paymentDetails, status);
+      onSuccess(
+        method, 
+        Number(method === 'Tunai' ? amountPaid : total), 
+        paymentDetails, 
+        status,
+        selectedStaffId,
+        selectedResellerId
+      );
     }, 2000);
   };
 
@@ -224,9 +241,21 @@ export default function PaymentModal({ total, items, paymentQrs, storeSettings, 
                 </div>
                 
                 <div className="space-y-4">
-                  <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Tagihan</p>
-                    <p className="text-2xl font-black text-red-600">{formatCurrency(total)}</p>
+                  <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                    <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(subtotal)}</span>
+                    </div>
+                    {discount > 0 && (
+                      <div className="flex justify-between items-center text-[10px] font-black text-orange-600 uppercase tracking-widest">
+                        <span>Diskon</span>
+                        <span>-{formatCurrency(discount)}</span>
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Tagihan</p>
+                      <p className="text-2xl font-black text-red-600">{formatCurrency(total)}</p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3">
@@ -263,8 +292,101 @@ export default function PaymentModal({ total, items, paymentQrs, storeSettings, 
               </div>
 
               {/* Right Side: Payment Input */}
-              <div className="flex-1 p-8 overflow-y-auto max-h-[60vh] md:max-h-none scrollbar-hide">
-                {method === 'Tunai' ? (
+              <div className="flex-1 p-8 overflow-y-auto max-h-[60vh] md:max-h-none scrollbar-hide flex flex-col">
+                <div className="flex items-center gap-1 mb-6 bg-slate-100 p-1 rounded-2xl w-fit">
+                  <button 
+                    onClick={() => setActiveRightTab('pembayaran')}
+                    className={cn(
+                      "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                      activeRightTab === 'pembayaran' ? "bg-white text-red-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    Input Bayar
+                  </button>
+                  <button 
+                    onClick={() => setActiveRightTab('komisi')}
+                    className={cn(
+                      "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                      activeRightTab === 'komisi' ? "bg-white text-red-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    Mitra & Staf
+                    {(selectedStaffId || selectedResellerId) && <div className="w-2 h-2 bg-red-600 rounded-full" />}
+                  </button>
+                </div>
+
+                {activeRightTab === 'komisi' ? (
+                  <div className="flex-1 space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Pilih Staf (Komisi Internal)</label>
+                        {selectedStaffId && (
+                          <button onClick={() => setSelectedStaffId(undefined)} className="text-[10px] font-bold text-red-600 uppercase">Hapus</button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {staffs.filter(s => s.status === 'active').map(staff => (
+                          <button
+                            key={staff.id}
+                            onClick={() => setSelectedStaffId(staff.id)}
+                            className={cn(
+                              "flex flex-col items-start p-4 rounded-2xl border-2 transition-all text-left",
+                              selectedStaffId === staff.id
+                                ? "border-red-600 bg-red-50 ring-4 ring-red-50 shadow-sm"
+                                : "border-slate-100 bg-white hover:border-slate-200"
+                            )}
+                          >
+                            <Users size={16} className={selectedStaffId === staff.id ? "text-red-600 mb-2" : "text-slate-400 mb-2"} />
+                            <p className="text-sm font-black text-slate-800 uppercase leading-tight truncate w-full">{staff.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{staff.role || 'Staf'}</p>
+                            <div className="mt-2 text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-md">
+                              {staff.commissionRate}% Komisi
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                      {staffs.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">Belum ada staf aktif</p>}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Pilih Reseller (Komisi Online)</label>
+                        {selectedResellerId && (
+                          <button onClick={() => setSelectedResellerId(undefined)} className="text-[10px] font-bold text-red-600 uppercase">Hapus</button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {resellers.filter(r => r.status === 'active').map(reseller => (
+                          <button
+                            key={reseller.id}
+                            onClick={() => setSelectedResellerId(reseller.id)}
+                            className={cn(
+                              "flex flex-col items-start p-4 rounded-2xl border-2 transition-all text-left",
+                              selectedResellerId === reseller.id
+                                ? "border-red-600 bg-red-50 ring-4 ring-red-50 shadow-sm"
+                                : "border-slate-100 bg-white hover:border-slate-200"
+                            )}
+                          >
+                            <Globe size={16} className={selectedResellerId === reseller.id ? "text-red-600 mb-2" : "text-slate-400 mb-2"} />
+                            <p className="text-sm font-black text-slate-800 uppercase leading-tight truncate w-full">{reseller.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{reseller.platform || 'Online'}</p>
+                            <div className="mt-2 text-[10px] font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
+                              {reseller.commissionRate}% Komisi
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                      {resellers.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">Belum ada reseller aktif</p>}
+                    </div>
+
+                    <button 
+                      onClick={() => setActiveRightTab('pembayaran')}
+                      className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm uppercase tracking-widest shadow-xl shadow-slate-200"
+                    >
+                      Kembali ke Pembayaran
+                    </button>
+                  </div>
+                ) : method === 'Tunai' ? (
                   <div className="h-full flex flex-col">
                     <div className="mb-8">
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-4">Input Uang Tunai</label>
@@ -389,7 +511,7 @@ export default function PaymentModal({ total, items, paymentQrs, storeSettings, 
                           )}
                           
                           <div className="text-center space-y-1">
-                             <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{storeSettings.name}</h3>
+                             <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{storeSettings?.name}</h3>
                              <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">
                                {['QRIS', 'Transfer', 'E-wallet'].includes(method) ? (selectedQR?.name || 'PILIH METODE QR') : method}
                              </p>

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, User as UserIcon, Mail, LogIn, UserPlus, ShieldCheck, Store, Loader2 } from 'lucide-react';
-import { User } from '../types';
+import { Lock, User as UserIcon, Mail, LogIn, UserPlus, ShieldCheck, Store, Loader2, AlertTriangle } from 'lucide-react';
+import { UserProfile } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { fetchProfile, saveData } from '../services/supabaseService';
 
 interface AuthProps {
-  onLogin: (user: User, isSignup?: boolean) => void;
+  onLogin: (user: UserProfile, isSignup?: boolean) => void;
 }
 
 export default function Auth({ onLogin }: AuthProps) {
@@ -26,23 +27,7 @@ export default function Auth({ onLogin }: AuthProps) {
 
     try {
       if (!isSupabaseConfigured) {
-        // Mock login for demo purposes when Supabase is not configured
-        setTimeout(() => {
-          const user: User = {
-            id: 'demo-user-id',
-            username: email.split('@')[0] || 'demo_user',
-            fullName: fullName || 'Demo User',
-            email: email || 'demo@forsdig.com',
-            phone: phone || '08123456789',
-            role: 'admin',
-            balance: 1000000,
-            status: 'active',
-            createdAt: Date.now(),
-          };
-          onLogin(user, !isLogin);
-          setIsLoading(false);
-        }, 1000);
-        return;
+        throw new Error('Konfigurasi Supabase tidak ditemukan. Mode Demo telah dinonaktifkan atas permintaan sistem. Harap hubungkan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.');
       }
 
       if (isLogin) {
@@ -54,18 +39,29 @@ export default function Auth({ onLogin }: AuthProps) {
         if (signInError) throw signInError;
 
         if (data.user) {
-          const user: User = {
-            id: data.user.id,
-            username: data.user.email?.split('@')[0] || 'user',
-            fullName: data.user.user_metadata?.full_name || '',
-            email: data.user.email || '',
-            phone: data.user.user_metadata?.phone || '',
-            role: 'admin', // Default role for now
-            balance: 0,
-            status: 'active',
-            createdAt: Date.now(),
-          };
-          onLogin(user, false);
+          // Fetch existing profile
+          let profile = await fetchProfile(data.user.id);
+          
+          if (!profile) {
+            // Fallback: create profile if it somehow missing
+            profile = {
+              id: data.user.id,
+              username: data.user.email?.split('@')[0] || 'user',
+              fullName: data.user.user_metadata?.full_name || '',
+              email: data.user.email || '',
+              phone: data.user.user_metadata?.phone || '',
+              role: 'user',
+              balance: 0,
+              defaultMarkup: 0,
+              minMarkup: 0,
+              maxMarkup: 10000,
+              status: 'active',
+              createdAt: new Date().toISOString(),
+            } as UserProfile;
+            await saveData('profiles', profile);
+          }
+          
+          onLogin(profile, false);
         }
       } else {
         const { data, error: signUpError } = await supabase.auth.signUp({
@@ -82,20 +78,28 @@ export default function Auth({ onLogin }: AuthProps) {
         if (signUpError) throw signUpError;
 
         if (data.user) {
-          const user: User = {
+          const profile: UserProfile = {
             id: data.user.id,
             username: data.user.email?.split('@')[0] || 'user',
             fullName: fullName,
             email: data.user.email || '',
             phone: phone,
-            role: 'admin',
+            role: 'user', // Default is user/reseller
             balance: 0,
+            defaultMarkup: 0,
+            minMarkup: 0,
+            maxMarkup: 10000,
+            subscriptionStatus: 'active',
+            packageType: 'FREE',
             status: 'active',
-            createdAt: Date.now(),
+            createdAt: new Date().toISOString(),
           };
           
+          // Initial profile save
+          await saveData('profiles', profile);
+          
           if (data.session) {
-            onLogin(user, true);
+            onLogin(profile, true);
           } else {
             setSuccess('Pendaftaran berhasil! Silakan periksa email Anda untuk verifikasi.');
           }
@@ -128,13 +132,16 @@ export default function Auth({ onLogin }: AuthProps) {
 
         <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
           {!isSupabaseConfigured && (
-            <div className="bg-amber-50 px-6 py-3 border-b border-amber-100 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
-                <Store size={16} />
+            <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+                <AlertTriangle size={20} />
               </div>
-              <p className="text-[10px] font-bold text-amber-700 leading-tight">
-                Mode Demo Aktif: Supabase belum dikonfigurasi. Anda dapat masuk dengan email & password apa saja.
-              </p>
+              <div>
+                <p className="text-xs font-black text-red-700 uppercase tracking-tight">Koneksi Database Terputus</p>
+                <p className="text-[10px] font-bold text-red-600/80 leading-tight mt-0.5">
+                  Variable VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY belum dikonfigurasi. Hubungi administrator.
+                </p>
+              </div>
             </div>
           )}
           <div className="flex border-b border-slate-50">

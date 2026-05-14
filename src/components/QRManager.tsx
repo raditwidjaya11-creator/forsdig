@@ -86,7 +86,7 @@ export default function QRManager({ initialQrs, onSave, onNotify }: QRManagerPro
       if (isEditing) {
         updatedQrs = updatedQrs.map(q => q.id === qrToSave.id ? qrToSave : q);
       } else {
-        updatedQrs.push(qrToSave);
+        updatedQrs = [...updatedQrs, qrToSave];
       }
 
       await onSave(updatedQrs);

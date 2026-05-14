@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, lazy, Suspense, memo } from 'react';
-import { Product, CartItem, Transaction, User, PaymentQR } from './types';
+import { useState, useEffect, useRef, lazy, Suspense, memo, useCallback } from 'react';
+import { Product, CartItem, Transaction, UserProfile, UserMarkup, PaymentQR, Staff, Reseller, Commission } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import Auth from './components/Auth';
 import { Toaster, toast } from 'sonner';
@@ -12,8 +12,13 @@ const PartnerManager = lazy(() => import('./components/PartnerManager'));
 const StoreSettings = lazy(() => import('./components/StoreSettings'));
 const PPOBDashboard = lazy(() => import('./components/PPOB/PPOBDashboard'));
 const AdminPPOB = lazy(() => import('./components/PPOB/AdminPPOB'));
+const MarkupSettingsForm = lazy(() => import('./components/PPOB/MarkupSettings'));
 const QRManager = lazy(() => import('./components/QRManager'));
 const CustomerDisplay = lazy(() => import('./components/CustomerDisplay'));
+const StaffManager = lazy(() => import('./components/StaffManager'));
+const ResellerManager = lazy(() => import('./components/ResellerManager'));
+const PromotionManager = lazy(() => import('./components/PromotionManager'));
+const VoucherReports = lazy(() => import('./components/VoucherReports'));
 
 import Cart from './components/Cart';
 import PaymentModal from './components/PaymentModal';
@@ -39,87 +44,50 @@ import {
   RefreshCcw,
   Cloud,
   ShieldCheck,
-  Monitor
+  Monitor,
+  Zap,
+  Globe,
+  TrendingUp,
+  Ticket
 } from 'lucide-react';
-import { StoreSettings as StoreSettingsType, Supplier, Client, PurchaseOrder, DebtReceivable, PPOBTransaction, Category, PPOBService, ApiSettings, MarkupSettings, PromoBanner, BroadcastNotification } from './types';
+import { StoreSettings as StoreSettingsType, Supplier, Client, PurchaseOrder, DebtReceivable, PPOBTransaction, Category, PPOBService, ApiSettings, MarkupSettings, PromoBanner, BroadcastNotification, Voucher, Customer } from './types';
 import { fetchData, saveData, deleteData } from './services/supabaseService';
-import { isSupabaseConfigured } from './lib/supabase';
+import { isSupabaseConfigured, supabase } from './lib/supabase';
+import { generateUUID } from './lib/utils';
 import LoadingScreen from './components/LoadingScreen';
 
+import { useStaffResellerStore } from './services/staffResellerStore';
+
+import { usePOSStore } from './services/posStore';
+import { usePPOBStore } from './services/ppobStore';
+
 export default function App() {
-  const getInitialUser = () => {
-    const saved = localStorage.getItem('pos_user');
-    return saved ? JSON.parse(saved) : null;
-  };
-
-  const initialUser = getInitialUser();
-  const isMounted = useRef(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [user, setUser] = useState<User | null>(initialUser);
-
-  const getStorageKey = (key: string, userId?: string) => {
-    const id = userId || user?.id;
-    return id ? `pos_u${id}_${key}` : `pos_guest_${key}`;
-  };
-
-  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'laporan' | 'pengaturan' | 'mitra' | 'ppob' | 'qr' | 'admin_ppob'>('kasir');
-  const [posSubTab, setPosSubTab] = useState<'produk' | 'riwayat'>('produk');
+  const [lastSync, setLastSync] = useState<number | null>(null);
+  const isMounted = useRef(true);
   
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('products', initialUser?.id));
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
-  const [categories, setCategories] = useState<Category[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('categories', initialUser?.id));
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: '1', name: 'Makanan' },
-      { id: '2', name: 'Minuman' },
-      { id: '3', name: 'Snack' },
-      { id: '4', name: 'Lainnya' }
-    ];
-  });
+  // Stores
+  const {
+    products, categories, transactions, customers, suppliers, 
+    purchaseOrders, debts, paymentQrs, storeSettings, vouchers,
+    fetchInitialData, addTransaction, updateProduct, deleteProduct,
+    addProduct, addCategory, updateCategory, deleteCategory, syncEntity,
+    isLoading: isPosLoading
+  } = usePOSStore();
+  
+  const {
+    userProfile: user,
+    fetchUserProfile,
+    fetchUserMarkups,
+    fetchServices,
+    fetchTransactions: fetchPpobTransactions,
+    fetchMutations,
+    isLoading: isPpobLoading
+  } = usePPOBStore();
+
+  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'laporan' | 'pengaturan' | 'mitra' | 'ppob' | 'qr' | 'admin_ppob' | 'promosi' | 'karyawan' | 'reseller' | 'laporan_voucher' | 'markup_pengaturan'>('kasir');
+  const [posSubTab, setPosSubTab] = useState<'produk' | 'riwayat'>('produk');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('transactions', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [ppobTransactions, setPpobTransactions] = useState<PPOBTransaction[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('ppob_transactions', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [ppobServices, setPpobServices] = useState<PPOBService[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('ppob_services', initialUser?.id));
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: '1', category: 'Pulsa', name: 'Telkomsel 10,000', provider: 'Telkomsel', price: 10500, adminFee: 2000 },
-      { id: '2', category: 'Paket Data', name: 'Telkomsel 10GB 30 Hari', provider: 'Telkomsel', price: 85000, adminFee: 2000 },
-      { id: '3', category: 'PLN', name: 'Token Listrik 20,000', provider: 'PLN', price: 20000, adminFee: 3000 },
-      { id: '4', category: 'PLN', name: 'Token Listrik 100,000', provider: 'PLN', price: 100000, adminFee: 3000 },
-      { id: '5', category: 'E-Wallet', name: 'Dana Topup 50,000', provider: 'Dana', price: 50000, adminFee: 2500 },
-      { id: '6', category: 'PDAM', name: 'Tagihan Air PDAM', provider: 'PDAM', price: 0, adminFee: 5000 },
-    ];
-  });
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('suppliers', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('clients', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('purchases', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [debts, setDebts] = useState<DebtReceivable[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('debts', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [paymentQrs, setPaymentQrs] = useState<PaymentQR[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('qrs', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
   const [showPayment, setShowPayment] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<Transaction | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
@@ -127,57 +95,101 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSync, setLastSync] = useState<number | null>(() => {
-    const saved = localStorage.getItem(getStorageKey('last_sync', initialUser?.id));
-    return saved ? parseInt(saved) : null;
-  });
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [storeSettings, setStoreSettings] = useState<StoreSettingsType>(() => {
-    const saved = localStorage.getItem(getStorageKey('settings', initialUser?.id));
-    return saved ? JSON.parse(saved) : {
-      name: 'forsdig',
-      address: 'Kawasan Bisnis Digital, Jakarta Selatan',
-      phone: '021-555-0123',
-      email: 'kontak@forsdig.com',
-      logo: '',
-      footerMessage: 'Terima kasih atas kunjungan Anda!',
-      taxRate: 11,
-      printerServiceUuid: ''
+  const [discount, setDiscount] = useState(0);
+  const [appliedVoucherCode, setAppliedVoucherCode] = useState<string | null>(null);
+
+  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+
+  useEffect(() => {
+    const checkUser = async () => {
+      // Add a safety timeout to ensure we don't get stuck forever
+      const timeoutId = setTimeout(() => {
+        if (authState === 'loading') {
+          console.warn('[ForsDig POS] Loading timeout reached. Forcing authenticated/unauthenticated state.');
+          setAuthState('unauthenticated');
+        }
+      }, 10000); // 10 seconds timeout
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setIsSyncing(true);
+          try {
+            // First fetch the most critical piece of data (Profile)
+            await fetchUserProfile(session.user.id);
+            
+            // Immediately transition to app since we have the profile
+            setAuthState('authenticated');
+            setLastSync(Date.now());
+
+            // Load the rest in background without blocking the UI transition
+            Promise.allSettled([
+              fetchInitialData(),
+              fetchUserMarkups(session.user.id),
+              fetchServices(),
+              fetchPpobTransactions(session.user.id),
+              fetchMutations(session.user.id)
+            ]).finally(() => {
+              setIsSyncing(false);
+            });
+          } catch (err) {
+            console.error('[ForsDig POS] Initial Data fetch error:', err);
+            setAuthState('authenticated');
+            setIsSyncing(false);
+          }
+        } else {
+          setAuthState('unauthenticated');
+        }
+      } catch (authErr) {
+        console.error('[ForsDig POS] Auth Session error:', authErr);
+        setAuthState('unauthenticated');
+      } finally {
+        clearTimeout(timeoutId);
+      }
     };
-  });
+    checkUser();
 
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('users', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setIsSyncing(true);
+        try {
+          await fetchUserProfile(session.user.id);
+          setAuthState('authenticated');
+          setLastSync(Date.now());
 
-  const [apiSettings, setApiSettings] = useState<ApiSettings[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('api_settings', initialUser?.id));
-    if (saved) return JSON.parse(saved);
-    return [
-      { provider: 'Digiflazz', apiKey: '', apiId: '', username: '', endpointUrl: 'https://api.digiflazz.com/v1', isActive: false },
-      { provider: 'Tripay', apiKey: '', secretKey: '', endpointUrl: 'https://tripay.co.id/api', isActive: false },
-    ];
-  });
+          Promise.allSettled([
+            fetchInitialData(),
+            fetchUserMarkups(session.user.id),
+            fetchServices(),
+            fetchPpobTransactions(session.user.id),
+            fetchMutations(session.user.id)
+          ]).finally(() => {
+            setIsSyncing(false);
+          });
+        } catch (err) {
+          console.error('[ForsDig POS] Auth data fetch error:', err);
+          setAuthState('authenticated');
+          setIsSyncing(false);
+        }
+      } else {
+        setAuthState('unauthenticated');
+      }
+    });
 
-  const [markupSettings, setMarkupSettings] = useState<MarkupSettings>(() => {
-    const saved = localStorage.getItem(getStorageKey('markup_settings', initialUser?.id));
-    return saved ? JSON.parse(saved) : {
-      type: 'flat',
-      value: 2000,
-      categoryMarkups: {}
-    };
-  });
+    return () => subscription.unsubscribe();
+  }, []);
 
-  const [promos, setPromos] = useState<PromoBanner[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('promos', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
+  const handleLogin = () => {
+    // Auth component handles signup/login via supabase.auth
+    // The onAuthStateChange listener will handle the rest
+  };
 
-  const [broadcasts, setBroadcasts] = useState<BroadcastNotification[]>(() => {
-    const saved = localStorage.getItem(getStorageKey('broadcasts', initialUser?.id));
-    return saved ? JSON.parse(saved) : [];
-  });
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setAuthState('unauthenticated');
+  };
 
   const isCustomerDisplayMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('display') === 'customer';
 
@@ -224,16 +236,18 @@ export default function App() {
   const lowStockProducts = products.filter(p => p.stock <= (p.minStock || 0) && p.isActive);
 
   useEffect(() => {
+    if (!storeSettings) return;
+
     const channel = new BroadcastChannel('pos_customer_display');
     const commonData = {
-      config: storeSettings.displayConfig,
-      storeName: storeSettings.name,
-      storeLogo: storeSettings.logo
+      config: storeSettings?.displayConfig,
+      storeName: storeSettings?.name,
+      storeLogo: storeSettings?.logo
     };
 
     try {
       if (cart.length > 0) {
-        const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * (1 + (storeSettings.taxRate || 0) / 100);
+        const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * (1 + (storeSettings?.taxRate || 0) / 100);
         channel.postMessage({
           type: 'cart',
           items: cart,
@@ -260,8 +274,12 @@ export default function App() {
   }, [cart, storeSettings]);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = () => {
+      // Logic for restoration or sync can stay here if needed
+    };
+    const handleOffline = () => {
+      // Logic for offline mode
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -272,289 +290,14 @@ export default function App() {
     };
   }, []);
 
+  const saveVouchers = async (updated: Voucher[]) => {
+    // Rely on store
+  };
+
   const syncWithSupabase = async () => {
-    if (!user || !isOnline || !isSupabaseConfigured) return;
     setIsSyncing(true);
-    try {
-      await Promise.all([
-        products.length > 0 ? saveData('products', products) : Promise.resolve(),
-        suppliers.length > 0 ? saveData('suppliers', suppliers) : Promise.resolve(),
-        clients.length > 0 ? saveData('clients', clients) : Promise.resolve(),
-        transactions.length > 0 ? saveData('transactions', transactions) : Promise.resolve(),
-        purchaseOrders.length > 0 ? saveData('purchase_orders', purchaseOrders) : Promise.resolve(),
-        debts.length > 0 ? saveData('debts', debts) : Promise.resolve(),
-        ppobTransactions.length > 0 ? saveData('ppob_transactions', ppobTransactions) : Promise.resolve(),
-        paymentQrs.length > 0 ? saveData('payment_qrs', paymentQrs) : Promise.resolve(),
-        saveData('store_settings', { ...storeSettings, id: 'default-settings' })
-      ]);
-      
-      if (isMounted.current) {
-        setLastSync(Date.now());
-        toast.success('Data berhasil disinkronkan dengan Supabase');
-      }
-      localStorage.setItem('pos_last_sync', Date.now().toString());
-    } catch (error) {
-      console.error('[ForsDig POS] Sync Error:', error);
-      if (isMounted.current) {
-        toast.error('Sinkronisasi gagal. Pastikan koneksi stabil.');
-      }
-    } finally {
-      if (isMounted.current) {
-        setIsSyncing(false);
-      }
-    }
-  };
-
-  const saveProducts = (updated: Product[]) => {
-    setProducts(updated);
-    localStorage.setItem(getStorageKey('products'), JSON.stringify(updated));
-  };
-
-  const saveCategories = (updated: Category[]) => {
-    setCategories(updated);
-    localStorage.setItem(getStorageKey('categories'), JSON.stringify(updated));
-  };
-
-  const saveSuppliers = (updated: Supplier[]) => {
-    setSuppliers(updated);
-    localStorage.setItem(getStorageKey('suppliers'), JSON.stringify(updated));
-  };
-
-  const saveClients = (updated: Client[]) => {
-    setClients(updated);
-    localStorage.setItem(getStorageKey('clients'), JSON.stringify(updated));
-  };
-
-  const savePurchases = (updated: PurchaseOrder[]) => {
-    setPurchaseOrders(updated);
-    localStorage.setItem(getStorageKey('purchases'), JSON.stringify(updated));
-  };
-
-  const saveDebts = (updated: DebtReceivable[]) => {
-    setDebts(updated);
-    localStorage.setItem(getStorageKey('debts'), JSON.stringify(updated));
-  };
-
-  const savePpob = (updated: PPOBTransaction[]) => {
-    setPpobTransactions(updated);
-    localStorage.setItem(getStorageKey('ppob_transactions'), JSON.stringify(updated));
-  };
-
-  const savePPOBServices = (updated: PPOBService[]) => {
-    setPpobServices(updated);
-    localStorage.setItem(getStorageKey('ppob_services'), JSON.stringify(updated));
-  };
-
-  const saveTransactions = (updated: Transaction[]) => {
-    setTransactions(updated);
-    localStorage.setItem(getStorageKey('transactions'), JSON.stringify(updated));
-  };
-
-  const savePaymentQrs = async (updated: PaymentQR[]) => {
-    setPaymentQrs(updated);
-    localStorage.setItem(getStorageKey('qrs'), JSON.stringify(updated));
-  };
-
-  const saveSettings = (updated: StoreSettingsType) => {
-    setStoreSettings(updated);
-    localStorage.setItem(getStorageKey('settings'), JSON.stringify(updated));
-  };
-
-  const saveUsers = (updated: User[]) => {
-    setUsers(updated);
-    localStorage.setItem(getStorageKey('users'), JSON.stringify(updated));
-  };
-
-  const saveApiSettings = (updated: ApiSettings[]) => {
-    setApiSettings(updated);
-    localStorage.setItem(getStorageKey('api_settings'), JSON.stringify(updated));
-  };
-
-  const saveMarkupSettings = (updated: MarkupSettings) => {
-    setMarkupSettings(updated);
-    localStorage.setItem(getStorageKey('markup_settings'), JSON.stringify(updated));
-  };
-
-  const savePromos = (updated: PromoBanner[]) => {
-    setPromos(updated);
-    localStorage.setItem(getStorageKey('promos'), JSON.stringify(updated));
-  };
-
-  const saveBroadcasts = (updated: BroadcastNotification[]) => {
-    setBroadcasts(updated);
-    localStorage.setItem(getStorageKey('broadcasts'), JSON.stringify(updated));
-  };
-
-  const resetBusinessData = (userId?: string) => {
-    const id = userId || user?.id;
-    if (!id) return;
-
-    const keys = [
-      'products', 'categories', 'transactions', 'ppob_transactions', 
-      'ppob_services', 'suppliers', 'clients', 'purchases', 
-      'debts', 'qrs', 'last_sync', 'settings', 
-      'api_settings', 'markup_settings', 'promos', 'broadcasts', 'users'
-    ];
-    keys.forEach(k => localStorage.removeItem(`pos_u${id}_${k}`));
-    
-    // If resetting current user, reset local states too
-    if (id === user?.id) {
-      setProducts(INITIAL_PRODUCTS);
-      setCategories([
-        { id: '1', name: 'Makanan' },
-        { id: '2', name: 'Minuman' },
-        { id: '3', name: 'Snack' },
-        { id: '4', name: 'Lainnya' }
-      ]);
-      setCart([]);
-      setTransactions([]);
-      setPpobTransactions([]);
-      setPpobServices([
-        { id: '1', category: 'Pulsa', name: 'Telkomsel 10,000', provider: 'Telkomsel', price: 10500, adminFee: 2000 },
-        { id: '2', category: 'Paket Data', name: 'Telkomsel 10GB 30 Hari', provider: 'Telkomsel', price: 85000, adminFee: 2000 },
-        { id: '3', category: 'PLN', name: 'Token Listrik 20,000', provider: 'PLN', price: 20000, adminFee: 3000 },
-        { id: '4', category: 'PLN', name: 'Token Listrik 100,000', provider: 'PLN', price: 100000, adminFee: 3000 },
-        { id: '5', category: 'E-Wallet', name: 'Dana Topup 50,000', provider: 'Dana', price: 50000, adminFee: 2500 },
-        { id: '6', category: 'PDAM', name: 'Tagihan Air PDAM', provider: 'PDAM', price: 0, adminFee: 5000 },
-      ]);
-      setSuppliers([]);
-      setClients([]);
-      setPurchaseOrders([]);
-      setDebts([]);
-      setPaymentQrs([]);
-      setApiSettings([
-        { provider: 'Digiflazz', apiKey: '', apiId: '', username: '', endpointUrl: 'https://api.digiflazz.com/v1', isActive: false },
-        { provider: 'Tripay', apiKey: '', secretKey: '', endpointUrl: 'https://tripay.co.id/api', isActive: false },
-      ]);
-      setMarkupSettings({
-        type: 'flat',
-        value: 2000,
-        categoryMarkups: {}
-      });
-      setPromos([]);
-      setBroadcasts([]);
-      setStoreSettings({
-        name: 'forsdig',
-        address: 'Kawasan Bisnis Digital, Jakarta Selatan',
-        phone: '021-555-0123',
-        email: 'kontak@forsdig.com',
-        logo: '',
-        footerMessage: 'Terima kasih atas kunjungan Anda!',
-        taxRate: 11,
-        printerServiceUuid: ''
-      });
-      setLastSync(null);
-    }
-  };
-
-  const loadUserData = (userId: string) => {
-    const get = (k: string) => localStorage.getItem(`pos_u${userId}_${k}`);
-    
-    const sProducts = get('products');
-    setProducts(sProducts ? JSON.parse(sProducts) : INITIAL_PRODUCTS);
-    
-    const sCategories = get('categories');
-    setCategories(sCategories ? JSON.parse(sCategories) : [
-      { id: '1', name: 'Makanan' },
-      { id: '2', name: 'Minuman' },
-      { id: '3', name: 'Snack' },
-      { id: '4', name: 'Lainnya' }
-    ]);
-    
-    const sTx = get('transactions');
-    setTransactions(sTx ? JSON.parse(sTx) : []);
-    
-    const sPpobTx = get('ppob_transactions');
-    setPpobTransactions(sPpobTx ? JSON.parse(sPpobTx) : []);
-    
-    const sPpobSv = get('ppob_services');
-    setPpobServices(sPpobSv ? JSON.parse(sPpobSv) : [
-      { id: '1', category: 'Pulsa', name: 'Telkomsel 10,000', provider: 'Telkomsel', price: 10500, adminFee: 2000 },
-      { id: '2', category: 'Paket Data', name: 'Telkomsel 10GB 30 Hari', provider: 'Telkomsel', price: 85000, adminFee: 2000 },
-      { id: '3', category: 'PLN', name: 'Token Listrik 20,000', provider: 'PLN', price: 20000, adminFee: 3000 },
-      { id: '4', category: 'PLN', name: 'Token Listrik 100,000', provider: 'PLN', price: 100000, adminFee: 3000 },
-      { id: '5', category: 'E-Wallet', name: 'Dana Topup 50,000', provider: 'Dana', price: 50000, adminFee: 2500 },
-      { id: '6', category: 'PDAM', name: 'Tagihan Air PDAM', provider: 'PDAM', price: 0, adminFee: 5000 },
-    ]);
-
-    const sSuppliers = get('suppliers');
-    setSuppliers(sSuppliers ? JSON.parse(sSuppliers) : []);
-    
-    const sClients = get('clients');
-    setClients(sClients ? JSON.parse(sClients) : []);
-    
-    const sPurchases = get('purchases');
-    setPurchaseOrders(sPurchases ? JSON.parse(sPurchases) : []);
-    
-    const sDebts = get('debts');
-    setDebts(sDebts ? JSON.parse(sDebts) : []);
-    
-    const sQrs = get('qrs');
-    setPaymentQrs(sQrs ? JSON.parse(sQrs) : []);
-    
-    const sApi = get('api_settings');
-    setApiSettings(sApi ? JSON.parse(sApi) : [
-      { provider: 'Digiflazz', apiKey: '', apiId: '', username: '', endpointUrl: 'https://api.digiflazz.com/v1', isActive: false },
-      { provider: 'Tripay', apiKey: '', secretKey: '', endpointUrl: 'https://tripay.co.id/api', isActive: false },
-    ]);
-    
-    const sMarkup = get('markup_settings');
-    setMarkupSettings(sMarkup ? JSON.parse(sMarkup) : {
-      type: 'flat',
-      value: 2000,
-      categoryMarkups: {}
-    });
-    
-    const sPromos = get('promos');
-    setPromos(sPromos ? JSON.parse(sPromos) : []);
-    
-    const sBroadcasts = get('broadcasts');
-    setBroadcasts(sBroadcasts ? JSON.parse(sBroadcasts) : []);
-    
-    const sSettings = get('settings');
-    setStoreSettings(sSettings ? JSON.parse(sSettings) : {
-      name: 'forsdig',
-      address: 'Kawasan Bisnis Digital, Jakarta Selatan',
-      phone: '021-555-0123',
-      email: 'kontak@forsdig.com',
-      logo: '',
-      footerMessage: 'Terima kasih atas kunjungan Anda!',
-      taxRate: 11,
-      printerServiceUuid: ''
-    });
-
-    const sUsers = get('users');
-    setUsers(sUsers ? JSON.parse(sUsers) : []);
-
-    const sLastSync = get('last_sync');
-    setLastSync(sLastSync ? parseInt(sLastSync) : null);
-  };
-
-  const handleLogin = (authenticatedUser: User, isSignup?: boolean) => {
-    if (isSignup) {
-      resetBusinessData(authenticatedUser.id);
-    }
-    
-    setUser(authenticatedUser);
-    localStorage.setItem('pos_user', JSON.stringify(authenticatedUser));
-    
-    // Load this specific user's data
-    loadUserData(authenticatedUser.id);
-    
-    // Only trigger sync if this is a registration and Supabase is configured
-    if (isSignup && isOnline && isSupabaseConfigured) {
-      syncWithSupabase();
-    }
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('pos_user');
-    // We keep business data in localStorage for persistence even after logging out
-    // It will be re-synced and potentially updated when logging back in
-    setCart([]);
-    setShowPayment(false);
-    setIsCartOpen(false);
+    await fetchInitialData();
+    setIsSyncing(false);
   };
 
   const addToCart = (product: Product) => {
@@ -587,7 +330,7 @@ export default function App() {
 
   const handleAddManual = (price: number) => {
     const manualProduct: Product = {
-      id: `manual-${Date.now()}`,
+      id: generateUUID(),
       sku: '',
       name: 'Item Manual',
       price: price,
@@ -602,46 +345,62 @@ export default function App() {
     addToCart(manualProduct);
   };
 
-  const handlePaymentSuccess = (method: string, amountPaid: number, details?: any, status: 'success' | 'pending' = 'success') => {
+  const handlePaymentSuccess = async (method: string, amountPaid: number, details?: any, status: 'success' | 'pending' = 'success', staffId?: string, resellerId?: string) => {
     const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-    const tax = subtotal * (storeSettings.taxRate / 100);
-    const total = subtotal + tax;
+    const discountedSubtotal = Math.max(0, subtotal - discount);
+    const tax = discountedSubtotal * ((storeSettings?.taxRate || 11) / 100);
+    const total = discountedSubtotal + tax;
 
     const newTransaction: Transaction = {
-      id: `TRX-${Date.now()}`,
+      id: generateUUID(),
       items: [...cart],
       subtotal,
       tax,
+      discount,
       total,
       paymentMethod: method as any,
       status,
       amountPaid,
       change: amountPaid - total,
       timestamp: Date.now(),
+      staffId,
+      resellerId,
       paymentDetails: details ? {
         ...details,
         cashierName: user?.username
       } : undefined
     };
 
-    const updatedTransactions = [...transactions, newTransaction];
-    saveTransactions(updatedTransactions);
+    await addTransaction(newTransaction);
     
-    // Update stock
-    const updatedProducts = products.map(p => {
-      const cartItem = cart.find(item => item.id === p.id);
-      if (cartItem) return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
-      return p;
-    });
-    saveProducts(updatedProducts);
+    // Update individual products stock in store
+    for (const item of cart) {
+      const product = products.find(p => p.id === item.id);
+      if (product) {
+        await updateProduct({
+          ...product,
+          stock: Math.max(0, product.stock - item.quantity)
+        });
+      }
+    }
+
+    // Refresh transactions list
+    await fetchInitialData();
 
     setCart([]);
+    setDiscount(0);
+    setAppliedVoucherCode(null);
     setShowPayment(false);
     setIsCartOpen(false);
     setLastTransaction(newTransaction);
+    toast.success('Transaksi Berhasil Disimpan');
   };
 
-  if (!user) {
+  if (authState === 'loading') {
+    return <LoadingScreen />;
+  }
+
+  if (authState === 'unauthenticated' || !user) {
     return <Auth onLogin={handleLogin} />;
   }
 
@@ -654,8 +413,19 @@ export default function App() {
     { id: 'produk', label: 'Stok', icon: Package },
     { id: 'mitra', label: 'Mitra', icon: Users },
     { id: 'ppob', label: 'PPOB', icon: Smartphone },
-    { id: 'laporan', label: 'Laporan', icon: BarChart3 },
-    { id: 'pengaturan', label: 'Pengaturan', icon: Settings },
+    ...(user?.role === 'admin' ? [
+      { id: 'karyawan', label: 'Staf', icon: Users },
+      { id: 'reseller', label: 'Relasi', icon: Globe },
+      { id: 'promosi', label: 'Promo', icon: Zap },
+      { id: 'laporan', label: 'Laporan', icon: BarChart3 },
+      { id: 'laporan_voucher', label: 'Analisis', icon: TrendingUp },
+      { id: 'admin_ppob', label: 'Admin PPOB', icon: ShieldCheck }
+    ] : [
+      { id: 'markup_pengaturan', label: 'Profit', icon: Zap },
+      { id: 'laporan', label: 'Laporan', icon: BarChart3 },
+    ]),
+    { id: 'qr', label: 'QR', icon: Smartphone },
+    { id: 'pengaturan', label: 'Setelan', icon: Settings },
   ];
 
   return (
@@ -697,7 +467,7 @@ export default function App() {
           </button>
           <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden border-2 border-white/20">
             <div className="w-full h-full bg-red-600 flex items-center justify-center text-xs font-bold text-white">
-               {user.username[0].toUpperCase()}
+               {(user?.username?.[0] || user?.fullName?.[0] || 'U').toUpperCase()}
             </div>
           </div>
         </div>
@@ -717,7 +487,19 @@ export default function App() {
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2">
                <div className="text-[13px] sm:text-lg md:text-xl font-bold text-slate-800 tracking-tight uppercase truncate max-w-[110px] xs:max-w-[150px] sm:max-w-none text-nowrap">
-                 {activeTab === 'kasir' ? 'Sistem Kasir' : activeTab === 'produk' ? 'Stok Barang' : activeTab === 'mitra' ? 'Manajemen Mitra' : activeTab === 'ppob' ? 'Layanan PPOB' : activeTab === 'laporan' ? 'Laporan Keuntungan' : activeTab === 'qr' ? 'QR Code' : 'Pengaturan Toko'}
+                 {
+                   activeTab === 'kasir' ? 'Sistem Kasir' : 
+                   activeTab === 'produk' ? 'Stok Barang' : 
+                   activeTab === 'mitra' ? 'Manajemen Mitra' : 
+                   activeTab === 'ppob' ? 'Layanan PPOB' : 
+                   activeTab === 'laporan' ? 'Laporan Keuntungan' : 
+                   activeTab === 'qr' ? 'QR Code' : 
+                   activeTab === 'karyawan' ? 'Manajemen Karyawan' :
+                   activeTab === 'reseller' ? 'Reseller Online' :
+                   activeTab === 'promosi' ? 'Promosi & Voucher' :
+                   activeTab === 'laporan_voucher' ? 'Analisis Voucher' :
+                   'Pengaturan Toko'
+                 }
                </div>
                {activeTab === 'kasir' && lowStockProducts.length > 0 && (
                  <motion.div
@@ -861,11 +643,16 @@ export default function App() {
             <div className="hidden md:block h-8 w-px bg-slate-200" />
 
             <div className="flex items-center gap-1.5 sm:gap-2 md:gap-4">
-              <div className="hidden lg:flex flex-col items-end">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Sistem</span>
+              <div className="flex flex-col items-end">
                 <div className="flex items-center gap-1.5">
+                  {isSyncing && (
+                    <div className="flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-amber-600 uppercase animate-pulse pr-1.5 sm:pr-2 border-r border-slate-200 mr-1">
+                      <RefreshCcw size={10} className="animate-spin" />
+                      <span className="hidden xs:inline">Menyelaraskan...</span>
+                    </div>
+                  )}
                   <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-slate-400'}`} />
-                  <span className={`text-[10px] font-bold uppercase ${isOnline ? 'text-green-600' : 'text-slate-500'}`}>
+                  <span className={`text-[8px] sm:text-[10px] font-bold uppercase ${isOnline ? 'text-green-600' : 'text-slate-500'}`}>
                     {isOnline ? 'Online' : 'Offline'}
                   </span>
                   {!isOnline && (
@@ -875,9 +662,9 @@ export default function App() {
               </div>
               <div className="px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-1.5 sm:gap-2 md:gap-3">
                 <div className="w-5 h-5 md:w-6 md:h-6 rounded-lg bg-red-600 flex items-center justify-center text-[8px] md:text-[10px] text-white font-bold shrink-0">
-                  {user.username[0].toUpperCase()}
+                  {(user?.username?.[0] || user?.fullName?.[0] || 'U').toUpperCase()}
                 </div>
-                <span className="text-[9px] sm:text-[10px] md:text-xs font-black text-slate-700 uppercase truncate max-w-[50px] sm:max-w-[80px] md:max-w-none">{user.username}</span>
+                <span className="text-[9px] sm:text-[10px] md:text-xs font-black text-slate-700 uppercase truncate max-w-[50px] sm:max-w-[80px] md:max-w-none">{user?.username || user?.fullName || 'User'}</span>
               </div>
               <button onClick={handleLogout} className="md:hidden p-1.5 text-slate-400 hover:text-red-600 transition-colors">
                 <LogOut size={18} />
@@ -931,11 +718,16 @@ export default function App() {
                 <div className="w-[400px] flex-shrink-0 hidden xl:block border-l border-slate-200">
                   <Cart 
                     items={cart} 
-                    taxRate={storeSettings.taxRate}
+                    taxRate={storeSettings?.taxRate || 0}
+                    discount={discount}
+                    vouchers={vouchers}
+                    appliedVoucherCode={appliedVoucherCode}
                     onUpdateQuantity={updateCartQuantity}
                     onRemove={removeFromCart}
                     onCheckout={() => setShowPayment(true)}
                     onAddManual={handleAddManual}
+                    onUpdateDiscount={setDiscount}
+                    onApplyVoucher={setAppliedVoucherCode}
                   />
                 </div>
               </motion.div>
@@ -953,10 +745,10 @@ export default function App() {
                   products={products}
                   categories={categories}
                   storeSettings={storeSettings}
-                  onAdd={(p) => saveProducts([...products, p])}
-                  onUpdate={(p) => saveProducts(products.map(pr => pr.id === p.id ? p : pr))}
-                  onDelete={(id) => saveProducts(products.filter(p => p.id !== id))}
-                  onUpdateCategories={saveCategories}
+                  onAdd={addProduct}
+                  onUpdate={updateProduct}
+                  onDelete={deleteProduct}
+                  onUpdateCategories={updateCategory}
                 />
               </motion.div>
             )}
@@ -971,7 +763,7 @@ export default function App() {
               >
                 <PartnerManager 
                   suppliers={suppliers}
-                  clients={clients}
+                  clients={customers}
                   purchaseOrders={purchaseOrders}
                   debts={debts}
                   products={products}
@@ -981,52 +773,13 @@ export default function App() {
                     setSelectedInvoice(t);
                     setSelectedCustomer(customer);
                   }}
-                  onAddSupplier={(s) => {
-                    saveSuppliers([...suppliers, s]);
-                  }}
-                  onAddClient={(c) => {
-                    saveClients([...clients, c]);
-                  }}
-                  onAddPurchase={(p) => {
-                    savePurchases([...purchaseOrders, p]);
-
-                    // If Hutang, add to debts
-                    if (p.paymentStatus === 'Hutang') {
-                      const newDebt: DebtReceivable = {
-                        id: `DEBT-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-                        partnerId: p.supplierId,
-                        partnerType: 'Supplier',
-                        type: 'Hutang',
-                        amount: p.total,
-                        remainingAmount: p.total,
-                        dueDate: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days default
-                        status: 'Belum Lunas',
-                        referenceId: p.id,
-                        timestamp: Date.now()
-                      };
-                      saveDebts([...debts, newDebt]);
-                    }
-                  }}
+                  onAddSupplier={(s) => syncEntity('suppliers', s)}
+                  onAddClient={(c) => syncEntity('customers', c)}
+                  onAddPurchase={(p) => syncEntity('purchase_orders', p)}
                   onReceivePurchase={(p) => {
-                    // Mark as Diterima
-                    const updatedPurchases = purchaseOrders.map(po => 
-                      po.id === p.id ? { ...po, status: 'Diterima' as const, receivedAt: Date.now() } : po
-                    );
-                    savePurchases(updatedPurchases);
-
-                    // Update stock for each item
-                    const updatedProducts = products.map(product => {
-                      const item = p.items.find(i => i.productId === product.id);
-                      if (item) {
-                        return { ...product, stock: product.stock + item.quantity };
-                      }
-                      return product;
-                    });
-                    saveProducts(updatedProducts);
+                    syncEntity('purchase_orders', { ...p, status: 'Diterima' as const, receivedAt: new Date().toISOString() });
                   }}
-                  onUpdateDebt={(d) => {
-                    saveDebts(debts.map(debt => debt.id === d.id ? d : debt));
-                  }}
+                  onUpdateDebt={(d) => syncEntity('debts', d)}
                 />
               </motion.div>
             )}
@@ -1055,6 +808,18 @@ export default function App() {
               </motion.div>
             )}
 
+            {activeTab === 'markup_pengaturan' && (
+              <motion.div 
+                key="markup_pengaturan"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.02 }}
+                className="flex-1 overflow-y-auto"
+              >
+                {user && <MarkupSettingsForm user={user} />}
+              </motion.div>
+            )}
+
             {activeTab === 'laporan' && (
               <motion.div 
                 key="laporan"
@@ -1067,7 +832,7 @@ export default function App() {
                   transactions={transactions} 
                   storeSettings={storeSettings}
                   isOnline={isOnline}
-                  onUpdateTransaction={(t) => saveTransactions(transactions.map(old => old.id === t.id ? t : old))}
+                  onUpdateTransaction={(t) => syncEntity('transactions', t)}
                 />
               </motion.div>
             )}
@@ -1082,7 +847,7 @@ export default function App() {
               >
                 <StoreSettings 
                   settings={storeSettings}
-                  onSave={saveSettings}
+                  onSave={(s) => syncEntity('store_settings', s)}
                   onOpenQRManager={() => setActiveTab('qr')}
                   isOnline={isOnline}
                 />
@@ -1099,12 +864,63 @@ export default function App() {
               >
                 <QRManager 
                   initialQrs={paymentQrs}
-                  onSave={savePaymentQrs}
+                  onSave={(q) => syncEntity('qris', q)}
                   onNotify={(msg, type) => {
                     if (type === 'error') toast.error(msg);
                     else toast.success(msg);
                   }}
                 />
+              </motion.div>
+            )}
+
+            {activeTab === 'karyawan' && (
+              <motion.div 
+                key="karyawan"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="flex-1 overflow-y-auto p-4 md:p-8"
+              >
+                <StaffManager />
+              </motion.div>
+            )}
+
+            {activeTab === 'reseller' && (
+              <motion.div 
+                key="reseller"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="flex-1 overflow-y-auto p-4 md:p-8"
+              >
+                <ResellerManager />
+              </motion.div>
+            )}
+
+            {activeTab === 'promosi' && (
+              <motion.div 
+                key="promosi"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="flex-1 overflow-y-auto p-4 md:p-8"
+              >
+                <PromotionManager 
+                  vouchers={vouchers}
+                  onUpdateVouchers={(v) => syncEntity('vouchers', v)}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === 'laporan_voucher' && (
+              <motion.div 
+                key="laporan_voucher"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="flex-1 overflow-y-auto p-4 md:p-8"
+              >
+                <VoucherReports />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1161,11 +977,16 @@ export default function App() {
                    <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-200 rounded-full" />
                     <Cart 
                       items={cart} 
-                      taxRate={storeSettings.taxRate}
+                      taxRate={storeSettings?.taxRate || 0}
+                      discount={discount}
+                      vouchers={vouchers}
+                      appliedVoucherCode={appliedVoucherCode}
                       onUpdateQuantity={updateCartQuantity}
                       onRemove={removeFromCart}
                       onCheckout={() => setShowPayment(true)}
                       onAddManual={handleAddManual}
+                      onUpdateDiscount={setDiscount}
+                      onApplyVoucher={setAppliedVoucherCode}
                     />
                  </motion.div>
                </div>
@@ -1178,7 +999,9 @@ export default function App() {
       <AnimatePresence>
         {showPayment && (
           <PaymentModal 
-            total={cart.reduce((acc, item) => acc + item.price * item.quantity, 0) * (1 + storeSettings.taxRate / 100)}
+            total={(Math.max(0, cart.reduce((acc, item) => acc + item.price * item.quantity, 0) - discount)) * (1 + (storeSettings?.taxRate || 0) / 100)}
+            subtotal={cart.reduce((acc, item) => acc + item.price * item.quantity, 0)}
+            discount={discount}
             items={cart}
             paymentQrs={paymentQrs}
             storeSettings={storeSettings}

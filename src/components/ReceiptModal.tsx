@@ -56,7 +56,7 @@ Kasir: ${transaction.paymentDetails?.cashierName || '-'}
 ${transaction.items.map(item => `${item.name.padEnd(15)} x${item.quantity} ${formatCurrency(item.price * item.quantity)}`).join('\n')}
 ========================
 Subtotal:   ${formatCurrency(transaction.subtotal)}
-Pajak (${storeSettings.taxRate}%): ${formatCurrency(transaction.tax)}
+${transaction.discount ? `Diskon:     -${formatCurrency(transaction.discount)}\n` : ''}Pajak (${storeSettings.taxRate}%): ${formatCurrency(transaction.tax)}
 Total:      ${formatCurrency(transaction.total)}
 Metode:     ${transaction.paymentMethod}${transaction.paymentDetails?.qrName ? ` (${transaction.paymentDetails.qrName})` : ''}
 Bayar:      ${formatCurrency(transaction.amountPaid)}
@@ -221,6 +221,12 @@ Kembalian:  ${formatCurrency(transaction.change)}
               <span>SUBTOTAL</span>
               <span>{formatCurrency(transaction.subtotal)}</span>
             </div>
+            {transaction.discount && transaction.discount > 0 && (
+              <div className="flex justify-between text-orange-600 font-black">
+                <span>DISKON</span>
+                <span>-{formatCurrency(transaction.discount)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-slate-600 font-bold">
               <span>PAJAK ({storeSettings.taxRate}%)</span>
               <span>{formatCurrency(transaction.tax)}</span>

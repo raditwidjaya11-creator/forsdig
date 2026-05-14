@@ -1,9 +1,9 @@
 import React from 'react';
-import { User } from '../types';
+import { UserProfile } from '../types';
 
 interface RoleGuardProps {
-  user: User | null;
-  allowedRoles: ('Admin' | 'Cashier')[];
+  user: UserProfile | null;
+  allowedRoles: ('admin' | 'user')[];
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }

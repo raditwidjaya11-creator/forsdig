@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StoreSettings as StoreSettingsType } from '../types';
 import { Settings, Save, Store, MapPin, Phone, MessageSquare, Percent, Mail, Image as ImageIcon, X, Bluetooth as BluetoothIcon, QrCode, RefreshCcw, Cloud, Monitor } from 'lucide-react';
 import { motion } from 'motion/react';
+import { usePPOBStore } from '../services/ppobStore';
 
 interface StoreSettingsProps {
   settings: StoreSettingsType;
@@ -16,8 +17,17 @@ export default function StoreSettings({
   onOpenQRManager, 
   isOnline
 }: StoreSettingsProps) {
-  const [logoPreview, setLogoPreview] = useState<string>(settings.logo);
-  const [displayLogoPreview, setDisplayLogoPreview] = useState<string>(settings.displayConfig?.displayLogo || '');
+  const [logoPreview, setLogoPreview] = useState<string>(settings?.logo || '');
+  const [displayLogoPreview, setDisplayLogoPreview] = useState<string>(settings?.displayConfig?.displayLogo || '');
+
+  if (!settings) {
+    return (
+      <div className="p-8 text-center">
+        <RefreshCcw className="w-12 h-12 text-slate-300 animate-spin mx-auto mb-4" />
+        <p className="text-slate-500 font-bold uppercase tracking-widest">Memuat Pengaturan...</p>
+      </div>
+    );
+  }
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -35,6 +45,7 @@ export default function StoreSettings({
     const formData = new FormData(e.target as HTMLFormElement);
     
     const newSettings: StoreSettingsType = {
+      id: settings.id,
       name: formData.get('name') as string,
       address: formData.get('address') as string,
       phone: formData.get('phone') as string,
@@ -253,7 +264,6 @@ export default function StoreSettings({
               </div>
 
               <div className="flex flex-col md:flex-row gap-8 items-start">
-                {/* Display Logo Upload */}
                 <div className="w-full md:w-48 space-y-4">
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <ImageIcon size={14} className="text-red-500" />
@@ -290,11 +300,9 @@ export default function StoreSettings({
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
                   </div>
-                  <p className="text-[9px] text-center text-slate-400 font-bold uppercase tracking-tighter">Gunakan Logo Terpisah</p>
                 </div>
 
                 <div className="flex-1 grid grid-cols-1 gap-6 w-full">
-                  {/* Welcome Text */}
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                       <MessageSquare size={14} className="text-red-500" />
@@ -308,20 +316,18 @@ export default function StoreSettings({
                     />
                   </div>
 
-                  {/* Promo Texts */}
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                       <Percent size={14} className="text-red-500" />
-                      Teks Promo (Berputar/Carousel)
+                      Teks Promo
                     </label>
                     <textarea
                       name="promoTexts"
                       defaultValue={settings.displayConfig?.promoTexts?.join(', ')}
-                      placeholder="Promo 1, Promo 2, Promo 3... (Pisahkan dengan koma)"
+                      placeholder="Promo 1, Promo 2..."
                       rows={3}
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold text-slate-800 resize-none font-mono text-sm"
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold text-slate-800 resize-none"
                     />
-                    <p className="text-[10px] text-slate-400 font-medium italic">Teks ini akan berganti secara otomatis setiap beberapa detik di layar pelanggan.</p>
                   </div>
                 </div>
               </div>

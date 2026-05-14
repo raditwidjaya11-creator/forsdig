@@ -6,7 +6,7 @@ interface DashboardCardProps {
   title: string;
   value: string | number;
   icon: LucideIcon;
-  variant?: 'white' | 'orange' | 'green' | 'blue' | 'purple';
+  variant?: 'white' | 'orange' | 'green' | 'blue' | 'purple' | 'yellow';
   delay?: number;
 }
 
@@ -17,9 +17,10 @@ const DashboardCard = memo(({ title, value, icon: Icon, variant = 'white', delay
     orange: "bg-orange-50 border-orange-100 text-orange-600 icon-bg-white icon-text-orange-600",
     green: "bg-green-50 border-green-100 text-green-600 icon-bg-white icon-text-green-600",
     purple: "bg-purple-50 border-purple-100 text-purple-600 icon-bg-white icon-text-purple-600",
+    yellow: "bg-yellow-50 border-yellow-100 text-yellow-700 icon-bg-white icon-text-yellow-600",
   };
 
-  const currentVariant = variants[variant];
+  const currentVariant = variants[variant] || variants.white;
   const [bgClass, borderClass, textClass, iconBgClass, iconTextClass] = currentVariant.split(' ');
 
   return (

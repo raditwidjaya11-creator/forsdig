@@ -1,13 +1,23 @@
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { PPOBService, PPOBTransaction, BalanceMutation, User } from '../types';
+import { PPOBService, PPOBTransaction, BalanceMutation, UserProfile, UserMarkup } from '../types';
 import axios from 'axios';
+import { snakeToCamel, saveData, deleteData } from './supabaseService';
+import { generateUUID } from '../lib/utils';
+import { toast } from 'sonner';
+
+// Configure axios with a default timeout
+const api = axios.create({
+  timeout: 15000 // 15 seconds
+});
 
 interface PPOBState {
   services: PPOBService[];
   transactions: PPOBTransaction[];
   mutations: BalanceMutation[];
-  userProfile: User | null;
+  userProfile: UserProfile | null;
+  userMarkups: UserMarkup[];
+  users: UserProfile[];
   isLoading: boolean;
   error: string | null;
   
@@ -16,6 +26,16 @@ interface PPOBState {
   fetchTransactions: (userId: string) => Promise<void>;
   fetchMutations: (userId: string) => Promise<void>;
   fetchUserProfile: (userId: string) => Promise<void>;
+  fetchUserMarkups: (userId: string) => Promise<void>;
+  fetchUsers: () => Promise<void>;
+  adjustBalance: (data: {
+    userId: string;
+    amount: number;
+    type: 'topup' | 'deduction';
+    description: string;
+  }) => Promise<boolean>;
+  
+  calculateFinalPrice: (service: PPOBService) => number;
   
   createTransaction: (data: {
     service: PPOBService;
@@ -26,22 +46,80 @@ interface PPOBState {
   
   syncTransactionStatus: (txId: string) => Promise<boolean>;
   syncBalance: (userId: string) => Promise<void>;
+  syncWithTripay: (provider?: 'Tripay' | 'Digiflazz') => Promise<void>;
+  updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
+  addMarkup: (markup: UserMarkup) => Promise<void>;
+  deleteMarkup: (id: string) => Promise<void>;
 }
 
 export const usePPOBStore = create<PPOBState>((set, get) => ({
-  // ... existing state ...
   services: [],
   transactions: [],
   mutations: [],
   userProfile: null,
+  userMarkups: [],
+  users: [],
   isLoading: false,
   error: null,
+
+  calculateFinalPrice: (service: PPOBService) => {
+    const { userProfile, userMarkups } = get();
+    const baseTotal = service.basePrice + service.adminMarkup;
+    if (!userProfile) return baseTotal;
+
+    // Priority 1: Product specific markup
+    const productMarkup = userMarkups.find(m => m.productId === service.id);
+    if (productMarkup) return baseTotal + productMarkup.markup;
+
+    // Priority 2: Category specific markup
+    const categoryMarkup = userMarkups.find(m => m.categoryName === service.category);
+    if (categoryMarkup) return baseTotal + categoryMarkup.markup;
+
+    // Priority 3: User default markup
+    const defaultUserMarkup = userProfile.defaultMarkup || 0;
+    return baseTotal + defaultUserMarkup;
+  },
+
+  fetchUserMarkups: async (userId) => {
+    if (!isSupabaseConfigured || userId === 'demo-user-id') return;
+    try {
+      const { data, error } = await supabase
+        .from('user_markups')
+        .select('*')
+        .eq('user_id', userId);
+      
+      if (!error) {
+        const markups = (data || []).map((m: any) => ({
+          id: m.id,
+          userId: m.user_id,
+          productId: m.product_id,
+          categoryName: m.category_name,
+          markup: Number(m.markup),
+          createdAt: m.created_at
+        }));
+        set({ userMarkups: markups });
+      }
+    } catch (err) {
+      console.error('Error fetching markups:', err);
+    }
+  },
+
+  syncWithTripay: async (provider: 'Tripay' | 'Digiflazz' = 'Tripay') => {
+    set({ isLoading: true, error: null });
+    try {
+      await api.post('/api/ppob/sync', { provider });
+      await get().fetchServices();
+      set({ isLoading: false });
+    } catch (err: any) {
+      set({ error: `Gagal sinkronasi dengan ${provider}`, isLoading: false });
+    }
+  },
 
   fetchServices: async () => {
     set({ isLoading: true, error: null });
     try {
       // Use our server proxy for better reliability and consistency
-      const response = await axios.get('/api/ppob/products');
+      const response = await api.get('/api/ppob/products');
       const data = response.data;
         
       const services = (data || []).map((s: any) => ({
@@ -50,11 +128,12 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
         code: s.code,
         name: s.name,
         provider: s.provider,
-        basePrice: s.base_price,
-        markupPrice: s.markup_price,
-        adminFee: s.admin_fee,
+        basePrice: Number(s.base_price),
+        adminMarkup: Number(s.admin_markup),
+        sellingPrice: Number(s.selling_price),
         isActive: s.is_active,
-        desc: s.description
+        description: s.description,
+        updatedAt: s.updated_at
       }));
       
       set({ services, isLoading: false });
@@ -82,28 +161,22 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
       .from('ppob_transactions')
       .select('*')
       .eq('user_id', userId)
-      .order('timestamp', { ascending: false });
+      .order('created_at', { ascending: false });
       
     if (!error) {
       const transactions = (data || []).map((t: any) => ({
         id: t.id,
         userId: t.user_id,
-        outletId: t.outlet_id,
-        serviceId: t.service_id,
+        productId: t.product_id,
         customerNumber: t.customer_number,
-        productName: t.product_name,
-        productCode: t.product_code,
-        amount: t.amount,
-        markup: t.markup,
-        adminFee: t.admin_fee,
-        total: t.total,
+        sellingPrice: Number(t.selling_price),
+        profitAdmin: Number(t.profit_admin),
+        profitUser: Number(t.profit_user),
         status: t.status,
         reference: t.reference,
         sn: t.sn,
-        timestamp: new Date(t.timestamp).getTime(),
-        updatedAt: t.updated_at ? new Date(t.updated_at).getTime() : undefined,
-        paymentMethod: t.payment_method,
-        notes: t.notes
+        details: t.details,
+        createdAt: t.created_at
       }));
       set({ transactions });
     }
@@ -130,9 +203,49 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
         referenceId: m.reference_id,
         previousBalance: m.previous_balance,
         currentBalance: m.current_balance,
-        timestamp: new Date(m.timestamp).getTime()
+        timestamp: new Date(m.timestamp).getTime(),
+        userName: m.profiles?.full_name || m.profiles?.username
       }));
       set({ mutations });
+    }
+  },
+
+  fetchUsers: async () => {
+    set({ isLoading: true });
+    try {
+      const response = await api.get('/api/admin/users');
+      const data = response.data;
+      const users = (data || []).map((u: any) => ({
+        id: u.id,
+        username: u.username,
+        fullName: u.full_name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+        balance: u.balance,
+        status: u.status,
+        createdAt: new Date(u.created_at).getTime()
+      }));
+      set({ users, isLoading: false });
+    } catch (err: any) {
+      set({ error: err.message, isLoading: false });
+    }
+  },
+
+  adjustBalance: async (data) => {
+    set({ isLoading: true });
+    try {
+      await api.post('/api/admin/adjust-balance', data);
+      await get().fetchUsers();
+      // Only fetch if a valid user ID is available, or use a separate admin fetch
+      if (data.userId !== 'all') {
+        await get().fetchMutations(data.userId);
+      }
+      set({ isLoading: false });
+      return true;
+    } catch (err: any) {
+      set({ error: err.message, isLoading: false });
+      return false;
     }
   },
 
@@ -146,6 +259,11 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
         phone: '08123456789',
         role: 'admin',
         balance: 1000000,
+        defaultMarkup: 0,
+        minMarkup: 0,
+        maxMarkup: 5000,
+        subscriptionStatus: 'active',
+        packageType: 'FREE',
         status: 'active',
         createdAt: Date.now()
       }});
@@ -154,7 +272,7 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
 
     try {
       // Use backend proxy to bypass RLS/permission issues
-      const response = await axios.get(`/api/user/profile/${userId}`);
+      const response = await api.get(`/api/user/profile/${userId}`);
       const data = response.data;
 
       if (data) {
@@ -165,9 +283,14 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
           email: data.email,
           phone: data.phone,
           role: data.role,
-          balance: data.balance,
+          balance: Number(data.balance),
+          defaultMarkup: Number(data.default_markup || 0),
+          minMarkup: Number(data.min_markup || 0),
+          maxMarkup: Number(data.max_markup || 10000),
+          subscriptionStatus: data.subscription_status || 'active',
+          packageType: data.package_type || 'FREE',
           status: data.status,
-          createdAt: new Date(data.created_at).getTime()
+          createdAt: data.created_at
         }});
       }
     } catch (err: any) {
@@ -202,7 +325,7 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
       let retries = 3;
       while (retries > 0) {
         try {
-          response = await axios.get(`/api/ppob/check-status/${tx.reference}`);
+          response = await api.get(`/api/ppob/check-status/${tx.reference}`);
           break;
         } catch (e) {
           retries--;
@@ -225,8 +348,7 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
             .update({ 
               status: newStatus, 
               sn: data.sn || tx.sn,
-              notes: data.note || tx.notes,
-              updated_at: new Date().toISOString()
+              details: { ...tx.details, api_note: data.note || '' }
             })
             .eq('id', txId);
 
@@ -236,9 +358,9 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
           if (newStatus === 'failed') {
             await supabase.rpc('process_transaction', {
               p_user_id: tx.userId,
-              p_amount: tx.total,
+              p_amount: tx.sellingPrice,
               p_type: 'refund',
-              p_description: `Refund: Transaksi ${tx.productName} Gagal`,
+              p_description: `Refund: Transaksi Gagal`,
               p_reference_id: txId
             });
             await get().syncBalance(tx.userId);
@@ -261,8 +383,14 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
 
   createTransaction: async (data) => {
     const { service, customerNumber, userId, outletId } = data;
-    const total = service.basePrice + service.markupPrice + service.adminFee;
+    
+    // Calculate User Markup
+    const finalPrice = get().calculateFinalPrice(service);
+    const userMarkup = finalPrice - (service.basePrice + service.adminMarkup);
+    const adminMarkup = service.adminMarkup;
+    
     const apiRef = `POS-${userId.slice(0, 4)}-${Date.now()}`;
+    const provider = service.provider || 'Tripay';
     
     set({ isLoading: true, error: null });
     
@@ -270,20 +398,15 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
       // Handle Demo Mode
       if (!isSupabaseConfigured || userId === 'demo-user-id') {
         const demoTx: PPOBTransaction = {
-          id: `DEMO-${Date.now()}`,
+          id: generateUUID(),
           userId,
-          outletId,
-          serviceId: service.id,
+          productId: service.id,
           customerNumber,
-          productName: service.name,
-          productCode: service.code,
-          amount: service.basePrice,
-          markup: service.markupPrice,
-          adminFee: service.adminFee,
-          total,
+          sellingPrice: finalPrice,
+          profitAdmin: adminMarkup,
+          profitUser: userMarkup,
           status: 'success',
-          timestamp: Date.now(),
-          paymentMethod: 'Saldo',
+          createdAt: new Date().toISOString(),
           reference: apiRef,
           sn: '1234567890'
         };
@@ -291,111 +414,97 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
         // Mock balance update
         const currentProfile = get().userProfile;
         if (currentProfile) {
-          set({ userProfile: { ...currentProfile, balance: currentProfile.balance - total } });
+          set({ userProfile: { ...currentProfile, balance: currentProfile.balance - finalPrice } as UserProfile });
         }
         
         set({ transactions: [demoTx, ...get().transactions], isLoading: false });
         return demoTx;
       }
 
-      // 1. Double check balance via backend to bypass RLS issues
+      // 1. Double check balance
       let profile;
       try {
-        const profileRes = await axios.get(`/api/user/profile/${userId}`);
+        const profileRes = await api.get(`/api/user/profile/${userId}`);
         profile = profileRes.data;
       } catch (profErr: any) {
         throw new Error(`Gagal mengambil profil pengguna: ${profErr.response?.data?.error || profErr.message}`);
       }
       
       if (!profile) throw new Error('Profil pengguna tidak ditemukan');
-      if (profile.balance < total) {
-        throw new Error(`Saldo tidak cukup. Dibutuhkan ${total}, saldo saat ini ${profile.balance}`);
+      if (profile.balance < finalPrice) {
+        throw new Error(`Saldo tidak cukup. Dibutuhkan ${finalPrice}, saldo saat ini ${profile.balance}`);
       }
-
-      // 2. Already prepared above
 
       // 3. Save Pending Transaction to DB first
       const { data: newTx, error: txErr } = await supabase
         .from('ppob_transactions')
         .insert({
           user_id: userId,
-          outlet_id: outletId,
-          service_id: service.id,
+          product_id: service.id,
           customer_number: customerNumber,
-          product_name: service.name,
-          product_code: service.code,
-          amount: service.basePrice,
-          markup: service.markupPrice,
-          admin_fee: service.adminFee,
-          total: total,
+          selling_price: finalPrice,
+          profit_admin: adminMarkup,
+          profit_user: userMarkup,
           status: 'pending',
-          payment_method: 'Saldo',
-          reference: apiRef
+          reference: apiRef,
+          created_at: new Date().toISOString()
         })
         .select()
         .single();
 
       if (txErr) throw txErr;
 
-      // 4. Deduct balance using RPC
+      // 4. Deduct balance
       const { error: rpcErr } = await supabase.rpc('process_transaction', {
         p_user_id: userId,
-        p_amount: -total,
+        p_amount: -finalPrice,
         p_type: 'transaction',
         p_description: `PPOB ${service.name} - ${customerNumber}`,
         p_reference_id: newTx.id
       });
 
       if (rpcErr) {
-        // Rollback transaction record if balance deduction fails
         await supabase.from('ppob_transactions').delete().eq('id', newTx.id);
         throw new Error(`Gagal memotong saldo: ${rpcErr.message}`);
       }
 
-      // 5. Call Backend API to Tripay with retry
-      let tripayResponse;
-      let retries = 2;
-      while (retries >= 0) {
-        try {
-          tripayResponse = await axios.post('/api/ppob/transaction', {
-            productCode: service.code,
-            customerNumber: customerNumber,
-            ref: apiRef
-          });
-          break;
-        } catch (triErr: any) {
-          if (retries === 0 || triErr.response?.status < 500) {
-             throw triErr;
-          }
-          retries--;
-          await new Promise(res => setTimeout(res, 2000));
-        }
+      // 5. Call Backend API
+      let apiResponse;
+      try {
+        apiResponse = await api.post('/api/ppob/transaction', {
+          productCode: service.code,
+          customerNumber: customerNumber,
+          ref: apiRef,
+          provider
+        });
+      } catch (apiErr: any) {
+          // If API fails, status remains pending, we will sync later
+          console.error("API Error during transaction:", apiErr);
       }
 
-      const tripayData = tripayResponse?.data?.data;
+      const responseData = apiResponse?.data?.data;
       
-      // 6. Update transaction with Tripay results
+      // 6. Update transaction
       const { data: updatedTx } = await supabase
         .from('ppob_transactions')
         .update({
-          reference: tripayData?.reference || apiRef,
-          status: tripayData?.status === 'Success' ? 'success' : 
-                  tripayData?.status === 'Gagal' ? 'failed' : 'pending',
-          sn: tripayData?.sn || '',
-          notes: tripayData?.note || '',
+          reference: responseData?.reference || apiRef,
+          status: responseData?.status === 'Success' ? 'success' : 
+                  responseData?.status === 'Gagal' ? 'failed' : 'pending',
+          sn: responseData?.sn || '',
           updated_at: new Date().toISOString()
         })
         .eq('id', newTx.id)
         .select()
         .single();
 
-      // 7. If Tripay immediately says "Gagal", refund
-      if (tripayData?.status === 'Gagal') {
+      // 7. Auto-refund if Gagal
+      if (responseData?.status === 'Gagal') {
         await supabase.rpc('process_transaction', {
           p_user_id: userId,
-          p_amount: total,
-          p_type: 'Refund',
-          p_description: `Refund: Transaksi Gagal (${tripayData?.note || 'API Error'})`,
+          p_amount: finalPrice,
+          p_type: 'refund',
+          p_description: `Refund: Transaksi Gagal (${responseData?.note || 'API Error'})`,
           p_reference_id: newTx.id
         });
       }
@@ -404,12 +513,9 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
       await get().syncBalance(userId);
       await get().fetchTransactions(userId);
       
-      return updatedTx;
+      return snakeToCamel(updatedTx);
     } catch (err: any) {
       console.error("[PPOB] Transaction Flow Error:", err);
-      // Determine if we should refund (only if we are sure Tripay didn't process it)
-      const isClientError = err.response?.status >= 400 && err.response?.status < 500;
-      
       set({ error: err.message || "Transaksi gagal diproses", isLoading: false });
       await get().syncBalance(userId);
       await get().fetchTransactions(userId);
@@ -419,5 +525,37 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
 
   syncBalance: async (userId) => {
     await get().fetchUserProfile(userId);
+  },
+
+  updateUserProfile: async (profile) => {
+    const { userProfile } = get();
+    if (!userProfile) return;
+    const updated = { ...userProfile, ...profile };
+    set({ userProfile: updated });
+    try {
+      await saveData('profiles', updated);
+    } catch (err) {
+      console.error('Failed to update profile:', err);
+    }
+  },
+
+  addMarkup: async (markup) => {
+    const { userMarkups } = get();
+    set({ userMarkups: [...userMarkups, markup] });
+    try {
+      await saveData('user_markups' as any, markup);
+    } catch (err) {
+      console.error('Failed to add markup:', err);
+    }
+  },
+
+  deleteMarkup: async (id) => {
+    const { userMarkups } = get();
+    set({ userMarkups: userMarkups.filter(m => m.id !== id) });
+    try {
+      await deleteData('user_markups' as any, id);
+    } catch (err) {
+      console.error('Failed to delete markup:', err);
+    }
   }
 }));

@@ -202,6 +202,12 @@ export default function InvoiceModal({ transaction, storeSettings, customer, onC
                     <span className="text-slate-400 font-bold uppercase text-[10px]">Subtotal:</span>
                     <span className="font-bold text-slate-900">{formatCurrency(transaction.subtotal)}</span>
                   </div>
+                  {transaction.discount && transaction.discount > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-orange-600 font-bold uppercase text-[10px]">DISKON:</span>
+                      <span className="font-bold text-orange-600">-{formatCurrency(transaction.discount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-400 font-bold uppercase text-[10px]">Pajak ({storeSettings.taxRate}%):</span>
                     <span className="font-bold text-slate-900">{formatCurrency(transaction.tax)}</span>
