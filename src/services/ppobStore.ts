@@ -256,12 +256,12 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
 
   fetchUserProfile: async (userId) => {
     if (!userId || String(userId) === 'undefined' || String(userId) === 'null') {
-      console.warn("[PPOB] fetchUserProfile dipanggil dengan ID tidak valid:", userId);
+      console.warn("[PPOB] fetchUserProfile: Invalid user ID", userId);
       return false;
     }
 
     if (!isSupabaseConfigured || userId === 'demo-user-id') {
-      console.log("[PPOB] Menggunakan profil demo...");
+      console.log("[PPOB] Loading demo profile...");
       set({ userProfile: {
         id: userId,
         username: 'demo_user',
@@ -282,26 +282,28 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
     }
 
     try {
-      console.log(`[PPOB] Memulai fetchUserProfile untuk: ${userId}`);
-      // Use backend proxy to bypass RLS/permission issues
-      const response = await api.get(`/api/user/profile/${userId}`);
-      
-      if (!response.data || typeof response.data !== 'object') {
-        console.error("[PPOB] Response data profil tidak valid atau kosong:", response.data);
-        throw new Error("Data profil tidak valid diterima dari server");
+      console.log(`[PPOB] Fetching profile for ${userId} from Supabase...`);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("[PPOB] Supabase profile error:", error);
+        throw error;
       }
 
-      const data = response.data;
-      console.log("[PPOB] Data profil berhasil diterima:", {
-        id: data.id,
-        username: data.username,
-        role: data.role,
-        balance: data.balance
-      });
+      if (!data) {
+        console.warn("[PPOB] Profile not found in DB for userId:", userId);
+        return false;
+      }
+
+      console.log("[PPOB] Profile successfully loaded from Supabase");
 
       set({ userProfile: {
         id: data.id,
-        username: data.username || `user_${String(data.id || '').substring(0, 5)}`,
+        username: data.username || `user_${String(data.id).substring(0, 5)}`,
         fullName: data.full_name || 'User',
         email: data.email || '',
         phone: data.phone || '',
@@ -318,32 +320,8 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
       
       return true;
     } catch (err: any) {
-      const errorData = err.response?.data;
-      const errorInfo = typeof errorData === 'string' ? errorData : (errorData?.error || errorData?.message);
-      const errorMsg = String(errorInfo || err.message || "Unknown error");
-      
-      console.error("[PPOB] Fetch Profile Error Detail:", {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        type: typeof errorMsg
-      });
-      
-      let friendlyError = `Gagal memuat profil: ${errorMsg}`;
-      
-      // Safe string check for includes
-      const safeErrorMsg = errorMsg.toLowerCase();
-      
-      if (safeErrorMsg.includes('permission denied')) {
-        friendlyError = "Izin ditolak untuk mengakses data profil pengguna.";
-      } else if (safeErrorMsg.includes('not found') || err.response?.status === 404) {
-        friendlyError = "Profil pengguna tidak ditemukan (404).";
-      } else if (err.response?.status === 400) {
-        friendlyError = "Permintaan profil tidak valid (ID salah).";
-      }
-      
-      set({ error: friendlyError });
-      toast.error(friendlyError);
+      console.error("[PPOB] fetchUserProfile Critical Failure:", err.message);
+      set({ error: `Gagal memuat profil: ${err.message}` });
       return false;
     }
   },
@@ -460,17 +438,16 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
         return demoTx;
       }
 
-      // 1. Double check balance
-      let profile;
-      try {
-        const profileRes = await api.get(`/api/user/profile/${userId}`);
-        profile = profileRes.data;
-      } catch (profErr: any) {
-        throw new Error(`Gagal mengambil profil pengguna: ${profErr.response?.data?.error || profErr.message}`);
-      }
+      // 1. Double check balance directly from Supabase
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', userId)
+        .maybeSingle();
       
+      if (profileErr) throw new Error(`Gagal mengambil profil: ${profileErr.message}`);
       if (!profile) throw new Error('Profil pengguna tidak ditemukan');
-      if (profile.balance < finalPrice) {
+      if (Number(profile.balance) < finalPrice) {
         throw new Error(`Saldo tidak cukup. Dibutuhkan ${finalPrice}, saldo saat ini ${profile.balance}`);
       }
 

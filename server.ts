@@ -233,65 +233,6 @@ async function startServer() {
     }
   });
 
-  // Proxy: Fetch User Profile
-  app.get("/api/user/profile/:userId", async (req, res) => {
-    try {
-      const { userId } = req.params;
-      console.log(`[SERVER] API GET /api/user/profile/${userId}`);
-
-      if (!userId || userId === 'undefined' || userId === 'null') {
-        return res.status(400).json({ error: "Invalid User ID disediakan" });
-      }
-
-      if (!supabaseUrl || !supabaseServiceKey || supabaseUrl.includes('placeholder')) {
-        return res.status(500).json({ 
-          error: "Konfigurasi Supabase Server (SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY) tidak ditemukan.",
-          code: "CONFIG_MISSING" 
-        });
-      }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle(); // maybeSingle doesn't throw error if not found
-      
-      if (error) {
-        console.error(`[SERVER] Profile Fetch DB Error for ${userId}:`, error.message);
-        return res.status(500).json({ error: error.message, code: error.code });
-      }
-      
-      if (!data) {
-        console.log(`[SERVER] Profile not found for ${userId}. Attempting to auto-create...`);
-        // Auto-create profile if missing (Admin context using service_role)
-        const { data: newProfile, error: createErr } = await supabase
-          .from("profiles")
-          .insert({ 
-            id: userId, 
-            username: `user_${userId.substring(0, 5)}`,
-            full_name: 'New User',
-            balance: 0,
-            role: 'kasir',
-            status: 'active'
-          })
-          .select()
-          .single();
-        
-        if (createErr) {
-          console.error(`[SERVER] Profile Auto-Creation Error for ${userId}:`, createErr.message);
-          return res.status(500).json({ error: "Gagal membuat profil otomatis", details: createErr.message });
-        }
-        return res.json(newProfile);
-      }
-
-      res.json(data);
-    } catch (error: unknown) {
-      const err = error as Error;
-      console.error("[SERVER] Profile Endpoint Critical Error:", err.message);
-      res.status(500).json({ error: "Internal Server Error", message: err.message });
-    }
-  });
-
   // Action: Sync Products from Tripay to DB
   const syncPPOBProducts = async () => {
     if (!supabaseUrl || !supabaseServiceKey || supabaseUrl.includes('placeholder')) {

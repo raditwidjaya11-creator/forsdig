@@ -27,42 +27,15 @@ export default function Auth({ onLogin }: AuthProps) {
 
     try {
       if (!isSupabaseConfigured) {
-        throw new Error('Konfigurasi Supabase tidak ditemukan. Mode Demo telah dinonaktifkan atas permintaan sistem. Harap hubungkan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.');
+        throw new Error('Konfigurasi Supabase tidak ditemukan. Harap hubungkan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.');
       }
 
       if (isLogin) {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-
         if (signInError) throw signInError;
-
-        if (data.user) {
-          // Fetch existing profile
-          let profile = await fetchProfile(data.user.id);
-          
-          if (!profile) {
-            // Fallback: create profile if it somehow missing
-            profile = {
-              id: data.user.id,
-              username: data.user.email?.split('@')[0] || 'user',
-              fullName: data.user.user_metadata?.full_name || '',
-              email: data.user.email || '',
-              phone: data.user.user_metadata?.phone || '',
-              role: 'user',
-              balance: 0,
-              defaultMarkup: 0,
-              minMarkup: 0,
-              maxMarkup: 10000,
-              status: 'active',
-              createdAt: new Date().toISOString(),
-            } as UserProfile;
-            await saveData('profiles', profile);
-          }
-          
-          onLogin(profile, false);
-        }
       } else {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
@@ -77,32 +50,8 @@ export default function Auth({ onLogin }: AuthProps) {
 
         if (signUpError) throw signUpError;
 
-        if (data.user) {
-          const profile: UserProfile = {
-            id: data.user.id,
-            username: data.user.email?.split('@')[0] || 'user',
-            fullName: fullName,
-            email: data.user.email || '',
-            phone: phone,
-            role: 'user', // Default is user/reseller
-            balance: 0,
-            defaultMarkup: 0,
-            minMarkup: 0,
-            maxMarkup: 10000,
-            subscriptionStatus: 'active',
-            packageType: 'FREE',
-            status: 'active',
-            createdAt: new Date().toISOString(),
-          };
-          
-          // Initial profile save
-          await saveData('profiles', profile);
-          
-          if (data.session) {
-            onLogin(profile, true);
-          } else {
-            setSuccess('Pendaftaran berhasil! Silakan periksa email Anda untuk verifikasi.');
-          }
+        if (data.user && !data.session) {
+          setSuccess('Pendaftaran berhasil! Silakan periksa email Anda untuk verifikasi.');
         }
       }
     } catch (err: any) {

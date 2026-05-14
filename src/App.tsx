@@ -102,31 +102,36 @@ export default function App() {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
 
   useEffect(() => {
+    let isSubscribed = true;
+
     const checkUser = async () => {
       // Add a safety timeout to ensure we don't get stuck forever
       const timeoutId = setTimeout(() => {
-        if (authState === 'loading') {
-          console.warn('[ForsDig POS] Loading timeout reached. Forcing authenticated/unauthenticated state.');
+        if (isSubscribed && authState === 'loading') {
+          console.warn('[ForsDig POS] Loading timeout reached. Forcing unauthenticated state.');
           setAuthState('unauthenticated');
         }
-      }, 10000); // 10 seconds timeout
+      }, 10000);
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log("[ForsDig POS] Checking session:", session?.user?.id ? "Authenticated" : "Unauthenticated");
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) throw sessionError;
+        if (!isSubscribed) return;
+
+        console.log("[ForsDig POS] Current session:", session?.user?.id ? `User ${session.user.id}` : "None");
         
         if (session?.user) {
           setIsSyncing(true);
           try {
-            console.log("[ForsDig POS] Fetching user profile for:", session.user.id);
             const profileSuccess = await fetchUserProfile(session.user.id);
+            if (!isSubscribed) return;
             
             if (profileSuccess) {
-              console.log("[ForsDig POS] Profile fetch successful, transition to authenticated.");
               setAuthState('authenticated');
               setLastSync(Date.now());
 
-              // Load the rest in background
+              // Load auxiliary data in background
               Promise.allSettled([
                 fetchInitialData(),
                 fetchUserMarkups(session.user.id),
@@ -134,45 +139,61 @@ export default function App() {
                 fetchPpobTransactions(session.user.id),
                 fetchMutations(session.user.id)
               ]).finally(() => {
-                setIsSyncing(false);
+                if (isSubscribed) setIsSyncing(false);
               });
             } else {
-              console.error("[ForsDig POS] Profile fetch failed. Stopping auth flow.");
               setAuthState('unauthenticated');
-              toast.error("Gagal memuat profil pengguna. Silakan coba login kembali.");
               setIsSyncing(false);
             }
           } catch (err) {
-            console.error('[ForsDig POS] Auth Data Error:', err);
-            setAuthState('unauthenticated');
-            setIsSyncing(false);
+            console.error('[ForsDig POS] Profile Init Error:', err);
+            if (isSubscribed) {
+              setAuthState('unauthenticated');
+              setIsSyncing(false);
+            }
           }
         } else {
           setAuthState('unauthenticated');
         }
       } catch (authErr) {
-        console.error('[ForsDig POS] Auth Session error:', authErr);
-        setAuthState('unauthenticated');
+        console.error('[ForsDig POS] Auth check error:', authErr);
+        if (isSubscribed) setAuthState('unauthenticated');
       } finally {
         clearTimeout(timeoutId);
       }
     };
+
     checkUser();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[ForsDig POS] Auth Event: ${event} for User: ${session?.user?.id || 'none'}`);
+      if (!isSubscribed) return;
+      console.log(`[ForsDig POS] Auth Event: ${event}`);
       
       if (session?.user) {
         setIsSyncing(true);
         try {
-          console.log("[ForsDig POS] Session changed, fetching profile for:", session.user.id);
-          const profileSuccess = await fetchUserProfile(session.user.id);
+          // Give the database trigger a small head start on SIGNED_IN
+          if (event === 'SIGNED_IN') {
+             await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          let profileSuccess = await fetchUserProfile(session.user.id);
           
+          // Retry once if profile not found immediately
+          if (!profileSuccess && event === 'SIGNED_IN') {
+             console.log("[ForsDig POS] Profile not found, retrying in 3s...");
+             await new Promise(resolve => setTimeout(resolve, 3000));
+             profileSuccess = await fetchUserProfile(session.user.id);
+          }
+
+          if (!isSubscribed) return;
+
           if (profileSuccess) {
             setAuthState('authenticated');
             setLastSync(Date.now());
-
+            
+            // Background sync
             Promise.allSettled([
               fetchInitialData(),
               fetchUserMarkups(session.user.id),
@@ -180,24 +201,29 @@ export default function App() {
               fetchPpobTransactions(session.user.id),
               fetchMutations(session.user.id)
             ]).finally(() => {
-              setIsSyncing(false);
+              if (isSubscribed) setIsSyncing(false);
             });
           } else {
-            console.error("[ForsDig POS] Auth Change profile fetch failed.");
+            console.error("[ForsDig POS] Profile fetch failed after retries.");
             setAuthState('unauthenticated');
             setIsSyncing(false);
           }
         } catch (err) {
-          console.error('[ForsDig POS] Auth Change Error:', err);
-          setAuthState('unauthenticated');
-          setIsSyncing(false);
+          console.error('[ForsDig POS] Auth Change Profile Error:', err);
+          if (isSubscribed) {
+            setAuthState('unauthenticated');
+            setIsSyncing(false);
+          }
         }
       } else {
         setAuthState('unauthenticated');
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isSubscribed = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleLogin = () => {
@@ -457,6 +483,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 overflow-hidden font-sans flex-col md:flex-row">
+      <Toaster position="top-right" richColors closeButton />
       
       {/* Sidebar Navigation (Desktop) */}
       <aside className="hidden md:flex w-20 bg-slate-900 flex-col items-center py-6 gap-8 shadow-xl z-20">
@@ -502,7 +529,6 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50 relative pb-20 md:pb-0">
-        <Toaster position="top-right" richColors closeButton />
         {!isOnline && (
           <div className="bg-slate-800 text-white py-1 px-4 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2">
             <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
