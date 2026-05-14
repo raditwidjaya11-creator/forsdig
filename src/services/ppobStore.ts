@@ -25,7 +25,7 @@ interface PPOBState {
   fetchServices: () => Promise<void>;
   fetchTransactions: (userId: string) => Promise<void>;
   fetchMutations: (userId: string) => Promise<void>;
-  fetchUserProfile: (userId: string) => Promise<void>;
+  fetchUserProfile: (userId: string) => Promise<boolean>;
   fetchUserMarkups: (userId: string) => Promise<void>;
   fetchUsers: () => Promise<void>;
   adjustBalance: (data: {
@@ -138,14 +138,19 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
       
       set({ services, isLoading: false });
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error || err.message;
+      const errorData = err.response?.data;
+      const errorInfo = typeof errorData === 'string' ? errorData : (errorData?.error || errorData?.message);
+      const errorMsg = String(errorInfo || err.message || "Unknown error");
+      
       console.error("[PPOB] Fetch Services Error:", errorMsg);
       
       let friendlyError = `Gagal memuat layanan: ${errorMsg}`;
-      if (errorMsg.includes('permission denied')) {
-        friendlyError = "Izin ditolak untuk mengakses tabel 'ppob_services'. Silakan jalankan SQL schema terbaru di dashboard Supabase (terutama bagian GRANT service_role).";
-      } else if (errorMsg.includes('TABLE_NOT_FOUND')) {
-        friendlyError = "Tabel 'ppob_services' tidak ditemukan. Pastikan Anda sudah menjalankan SQL schema di Supabase dashboard.";
+      const safeErrorMsg = errorMsg.toLowerCase();
+      
+      if (safeErrorMsg.includes('permission denied')) {
+        friendlyError = "Izin ditolak untuk mengakses layanan PPOB.";
+      } else if (safeErrorMsg.includes('table_not_found') || safeErrorMsg.includes('not found')) {
+        friendlyError = "Layanan PPOB belum dikonfigurasi di database.";
       }
       
       set({ error: friendlyError, isLoading: false });
@@ -250,9 +255,9 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
   },
 
   fetchUserProfile: async (userId) => {
-    if (!userId) {
-      console.warn("[PPOB] fetchUserProfile dipanggil tanpa userId");
-      return;
+    if (!userId || String(userId) === 'undefined' || String(userId) === 'null') {
+      console.warn("[PPOB] fetchUserProfile dipanggil dengan ID tidak valid:", userId);
+      return false;
     }
 
     if (!isSupabaseConfigured || userId === 'demo-user-id') {
@@ -273,7 +278,7 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
         status: 'active',
         createdAt: Date.now()
       }});
-      return;
+      return true;
     }
 
     try {
@@ -282,16 +287,21 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
       const response = await api.get(`/api/user/profile/${userId}`);
       
       if (!response.data || typeof response.data !== 'object') {
-        console.error("[PPOB] Response data profil tidak valid:", response.data);
-        throw new Error("Data profil tidak valid dari server");
+        console.error("[PPOB] Response data profil tidak valid atau kosong:", response.data);
+        throw new Error("Data profil tidak valid diterima dari server");
       }
 
       const data = response.data;
-      console.log("[PPOB] Data profil berhasil diterima:", data);
+      console.log("[PPOB] Data profil berhasil diterima:", {
+        id: data.id,
+        username: data.username,
+        role: data.role,
+        balance: data.balance
+      });
 
       set({ userProfile: {
         id: data.id,
-        username: data.username || `user_${data.id?.substring(0, 5)}`,
+        username: data.username || `user_${String(data.id || '').substring(0, 5)}`,
         fullName: data.full_name || 'User',
         email: data.email || '',
         phone: data.phone || '',
@@ -305,30 +315,36 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
         status: data.status || 'active',
         createdAt: data.created_at || Date.now()
       }});
+      
+      return true;
     } catch (err: any) {
       const errorData = err.response?.data;
       const errorInfo = typeof errorData === 'string' ? errorData : (errorData?.error || errorData?.message);
-      const errorMsg = errorInfo || err.message || "Unknown error";
+      const errorMsg = String(errorInfo || err.message || "Unknown error");
       
       console.error("[PPOB] Fetch Profile Error Detail:", {
         message: err.message,
         response: err.response?.data,
-        status: err.response?.status
+        status: err.response?.status,
+        type: typeof errorMsg
       });
       
       let friendlyError = `Gagal memuat profil: ${errorMsg}`;
       
       // Safe string check for includes
-      const safeErrorMsg = String(errorMsg).toLowerCase();
+      const safeErrorMsg = errorMsg.toLowerCase();
       
       if (safeErrorMsg.includes('permission denied')) {
-        friendlyError = "Izin ditolak untuk mengakses tabel 'profiles'.";
+        friendlyError = "Izin ditolak untuk mengakses data profil pengguna.";
       } else if (safeErrorMsg.includes('not found') || err.response?.status === 404) {
-        friendlyError = "Profil pengguna tidak ditemukan di sistem.";
+        friendlyError = "Profil pengguna tidak ditemukan (404).";
+      } else if (err.response?.status === 400) {
+        friendlyError = "Permintaan profil tidak valid (ID salah).";
       }
       
       set({ error: friendlyError });
       toast.error(friendlyError);
+      return false;
     }
   },
 

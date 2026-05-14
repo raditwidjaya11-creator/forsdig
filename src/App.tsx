@@ -119,28 +119,32 @@ export default function App() {
           setIsSyncing(true);
           try {
             console.log("[ForsDig POS] Fetching user profile for:", session.user.id);
-            await fetchUserProfile(session.user.id);
+            const profileSuccess = await fetchUserProfile(session.user.id);
             
-            // Wait a small bit to ensure state is committed (or check from store directly if needed)
-            // But usually zustand set() is immediate enough for following logic if we don't rely on React state yet
-            
-            console.log("[ForsDig POS] Handled profile fetch, transition to authenticated.");
-            setAuthState('authenticated');
-            setLastSync(Date.now());
+            if (profileSuccess) {
+              console.log("[ForsDig POS] Profile fetch successful, transition to authenticated.");
+              setAuthState('authenticated');
+              setLastSync(Date.now());
 
-            // Load the rest in background without blocking the UI transition
-            Promise.allSettled([
-              fetchInitialData(),
-              fetchUserMarkups(session.user.id),
-              fetchServices(),
-              fetchPpobTransactions(session.user.id),
-              fetchMutations(session.user.id)
-            ]).finally(() => {
+              // Load the rest in background
+              Promise.allSettled([
+                fetchInitialData(),
+                fetchUserMarkups(session.user.id),
+                fetchServices(),
+                fetchPpobTransactions(session.user.id),
+                fetchMutations(session.user.id)
+              ]).finally(() => {
+                setIsSyncing(false);
+              });
+            } else {
+              console.error("[ForsDig POS] Profile fetch failed. Stopping auth flow.");
+              setAuthState('unauthenticated');
+              toast.error("Gagal memuat profil pengguna. Silakan coba login kembali.");
               setIsSyncing(false);
-            });
+            }
           } catch (err) {
-            console.error('[ForsDig POS] Initial Data fetch error:', err);
-            setAuthState('authenticated');
+            console.error('[ForsDig POS] Auth Data Error:', err);
+            setAuthState('unauthenticated');
             setIsSyncing(false);
           }
         } else {
@@ -157,29 +161,35 @@ export default function App() {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[ForsDig POS] Auth Event: ${event}`);
+      console.log(`[ForsDig POS] Auth Event: ${event} for User: ${session?.user?.id || 'none'}`);
       
       if (session?.user) {
         setIsSyncing(true);
         try {
           console.log("[ForsDig POS] Session changed, fetching profile for:", session.user.id);
-          await fetchUserProfile(session.user.id);
+          const profileSuccess = await fetchUserProfile(session.user.id);
           
-          setAuthState('authenticated');
-          setLastSync(Date.now());
+          if (profileSuccess) {
+            setAuthState('authenticated');
+            setLastSync(Date.now());
 
-          Promise.allSettled([
-            fetchInitialData(),
-            fetchUserMarkups(session.user.id),
-            fetchServices(),
-            fetchPpobTransactions(session.user.id),
-            fetchMutations(session.user.id)
-          ]).finally(() => {
+            Promise.allSettled([
+              fetchInitialData(),
+              fetchUserMarkups(session.user.id),
+              fetchServices(),
+              fetchPpobTransactions(session.user.id),
+              fetchMutations(session.user.id)
+            ]).finally(() => {
+              setIsSyncing(false);
+            });
+          } else {
+            console.error("[ForsDig POS] Auth Change profile fetch failed.");
+            setAuthState('unauthenticated');
             setIsSyncing(false);
-          });
+          }
         } catch (err) {
-          console.error('[ForsDig POS] Auth data fetch error:', err);
-          setAuthState('authenticated');
+          console.error('[ForsDig POS] Auth Change Error:', err);
+          setAuthState('unauthenticated');
           setIsSyncing(false);
         }
       } else {
