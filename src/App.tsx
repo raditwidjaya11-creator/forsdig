@@ -377,10 +377,18 @@ export default function App() {
     for (const item of cart) {
       const product = products.find(p => p.id === item.id);
       if (product) {
+        const newStock = Math.max(0, product.stock - item.quantity);
         await updateProduct({
           ...product,
-          stock: Math.max(0, product.stock - item.quantity)
+          stock: newStock
         });
+
+        // Show warning if stock becomes low or empty
+        if (newStock === 0) {
+          toast.error(`Stok Habis: ${product.name}`, { icon: '🚫' });
+        } else if (newStock <= (product.minStock || 0)) {
+          toast.warning(`Stok Menipis: ${product.name} (Sisa ${newStock})`, { icon: '⚠️' });
+        }
       }
     }
 
@@ -550,6 +558,24 @@ export default function App() {
                <Monitor size={14} />
                <span>Display</span>
             </button>
+
+            {lowStockProducts.length > 0 && (
+              <motion.button
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                onClick={() => {
+                  setActiveTab('produk');
+                  // Filter products with low stock could be a future enhancement
+                }}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 rounded-xl border border-red-100 animate-pulse hover:bg-red-100 transition-all group"
+              >
+                <AlertTriangle size={14} className="shrink-0" />
+                <div className="flex flex-col -space-y-0.5 text-left">
+                  <span className="text-[8px] font-black uppercase tracking-tighter">Stok Rendah</span>
+                  <span className="text-[10px] font-bold leading-tight group-hover:underline">{lowStockProducts.length} Produk</span>
+                </div>
+              </motion.button>
+            )}
 
             <div className="relative">
               <button 
