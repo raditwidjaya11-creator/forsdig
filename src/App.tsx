@@ -113,13 +113,18 @@ export default function App() {
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        console.log("[ForsDig POS] Checking session:", session?.user?.id ? "Authenticated" : "Unauthenticated");
+        
         if (session?.user) {
           setIsSyncing(true);
           try {
-            // First fetch the most critical piece of data (Profile)
+            console.log("[ForsDig POS] Fetching user profile for:", session.user.id);
             await fetchUserProfile(session.user.id);
             
-            // Immediately transition to app since we have the profile
+            // Wait a small bit to ensure state is committed (or check from store directly if needed)
+            // But usually zustand set() is immediate enough for following logic if we don't rely on React state yet
+            
+            console.log("[ForsDig POS] Handled profile fetch, transition to authenticated.");
             setAuthState('authenticated');
             setLastSync(Date.now());
 
@@ -152,10 +157,14 @@ export default function App() {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[ForsDig POS] Auth Event: ${event}`);
+      
       if (session?.user) {
         setIsSyncing(true);
         try {
+          console.log("[ForsDig POS] Session changed, fetching profile for:", session.user.id);
           await fetchUserProfile(session.user.id);
+          
           setAuthState('authenticated');
           setLastSync(Date.now());
 

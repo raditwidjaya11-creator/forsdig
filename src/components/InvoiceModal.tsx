@@ -24,7 +24,7 @@ export default function InvoiceModal({ transaction, storeSettings, customer, onC
   };
 
   const handleShare = async () => {
-    const shareText = `Invoice ${transaction.id}\nTotal: ${formatCurrency(transaction.total)}\nStatus: ${transaction.status}\n\nTerima kasih telah berbelanja di ${storeSettings.name}`;
+    const shareText = `Invoice ${transaction.id}\nTotal: ${formatCurrency(transaction.total)}\nStatus: ${transaction.status}\n\nTerima kasih telah berbelanja di ${storeSettings?.name || 'ForsDig POS'}`;
     
     if (navigator.share) {
       try {
@@ -98,29 +98,29 @@ export default function InvoiceModal({ transaction, storeSettings, customer, onC
             {/* Header */}
             <div className="flex justify-between items-start mb-12">
               <div>
-                {storeSettings.logo ? (
+                {storeSettings?.logo ? (
                   <img src={storeSettings.logo} alt="Logo" className="h-16 w-auto mb-4 object-contain" />
                 ) : (
                   <div className="h-16 w-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black text-2xl mb-4">
-                    {storeSettings.name.charAt(0)}
+                    {(storeSettings?.name || 'F').charAt(0)}
                   </div>
                 )}
                 <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter mb-2">INVOICE</h1>
                 <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">#{transaction.id.slice(-12).toUpperCase()}</p>
               </div>
               <div className="text-right space-y-1">
-                <h2 className="font-black text-xl text-slate-900 uppercase">{storeSettings.name}</h2>
+                <h2 className="font-black text-xl text-slate-900 uppercase">{storeSettings?.name || 'ForsDig POS'}</h2>
                 <div className="flex items-center justify-end gap-2 text-slate-500 text-sm font-medium">
                   <MapPin size={14} />
-                  <span>{storeSettings.address}</span>
+                  <span>{storeSettings?.address || '-'}</span>
                 </div>
                 <div className="flex items-center justify-end gap-2 text-slate-500 text-sm font-medium">
                   <Phone size={14} />
-                  <span>{storeSettings.phone}</span>
+                  <span>{storeSettings?.phone || '-'}</span>
                 </div>
                 <div className="flex items-center justify-end gap-2 text-slate-500 text-sm font-medium">
                   <Mail size={14} />
-                  <span>{storeSettings.email}</span>
+                  <span>{storeSettings?.email || '-'}</span>
                 </div>
               </div>
             </div>
@@ -209,7 +209,7 @@ export default function InvoiceModal({ transaction, storeSettings, customer, onC
                     </div>
                   )}
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-400 font-bold uppercase text-[10px]">Pajak ({storeSettings.taxRate}%):</span>
+                    <span className="text-slate-400 font-bold uppercase text-[10px]">Pajak ({storeSettings?.taxRate || 0}%):</span>
                     <span className="font-bold text-slate-900">{formatCurrency(transaction.tax)}</span>
                   </div>
                   {transaction.adminFee && (
@@ -242,7 +242,7 @@ export default function InvoiceModal({ transaction, storeSettings, customer, onC
             <div className="mt-12 text-center">
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Terima Kasih</p>
-                <p className="text-xs font-bold text-slate-600 leading-relaxed italic">{storeSettings.footerMessage}</p>
+                <p className="text-xs font-bold text-slate-600 leading-relaxed italic">{storeSettings?.footerMessage || '-'}</p>
               </div>
             </div>
           </div>

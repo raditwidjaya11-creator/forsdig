@@ -45,9 +45,9 @@ export default function ReceiptModal({ transaction, storeSettings, onClose, onVi
 
   const handleDownload = () => {
     const receiptText = `
-=== ${storeSettings.name.toUpperCase()} ===
-${storeSettings.address}
-Tlp: ${storeSettings.phone}
+=== ${(storeSettings?.name || 'Toko').toUpperCase()} ===
+${storeSettings?.address || '-'}
+Tlp: ${storeSettings?.phone || '-'}
 ========================
 No: ${transaction.id}
 Tgl: ${format(transaction.timestamp, 'dd/MM/yyyy HH:mm')}
@@ -56,13 +56,13 @@ Kasir: ${transaction.paymentDetails?.cashierName || '-'}
 ${transaction.items.map(item => `${item.name.padEnd(15)} x${item.quantity} ${formatCurrency(item.price * item.quantity)}`).join('\n')}
 ========================
 Subtotal:   ${formatCurrency(transaction.subtotal)}
-${transaction.discount ? `Diskon:     -${formatCurrency(transaction.discount)}\n` : ''}Pajak (${storeSettings.taxRate}%): ${formatCurrency(transaction.tax)}
+${transaction.discount ? `Diskon:     -${formatCurrency(transaction.discount)}\n` : ''}Pajak (${storeSettings?.taxRate || 0}%): ${formatCurrency(transaction.tax)}
 Total:      ${formatCurrency(transaction.total)}
 Metode:     ${transaction.paymentMethod}${transaction.paymentDetails?.qrName ? ` (${transaction.paymentDetails.qrName})` : ''}
 Bayar:      ${formatCurrency(transaction.amountPaid)}
 Kembalian:  ${formatCurrency(transaction.change)}
 ========================
-    ${storeSettings.footerMessage}
+    ${storeSettings?.footerMessage || '-'}
     `;
     
     const element = document.createElement("a");
@@ -171,16 +171,16 @@ Kembalian:  ${formatCurrency(transaction.change)}
           >
             <div className="flex-1 p-5 md:p-6 pb-2 print:p-0 print:overflow-visible font-mono">
           <div className="text-center space-y-1 mb-4 sm:mb-6">
-            {storeSettings.logo && (
+            {storeSettings?.logo && (
               <div className="flex justify-center mb-3">
                 <img src={storeSettings.logo} alt="Logo" className="h-10 w-auto object-contain" />
               </div>
             )}
-            <h1 className="text-sm font-black uppercase tracking-widest text-slate-900">{storeSettings.name}</h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight leading-tight">{storeSettings.address}</p>
+            <h1 className="text-sm font-black uppercase tracking-widest text-slate-900">{storeSettings?.name || 'ForsDig POS'}</h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight leading-tight">{storeSettings?.address || '-'}</p>
             <div className="flex flex-col items-center gap-0.5">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Tlp: {storeSettings.phone}</p>
-              {storeSettings.email && (
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Tlp: {storeSettings?.phone || '-'}</p>
+              {storeSettings?.email && (
                 <p className="text-[10px] text-slate-500 font-bold lowercase tracking-tight">{storeSettings.email}</p>
               )}
             </div>
@@ -228,7 +228,7 @@ Kembalian:  ${formatCurrency(transaction.change)}
               </div>
             )}
             <div className="flex justify-between text-slate-600 font-bold">
-              <span>PAJAK ({storeSettings.taxRate}%)</span>
+              <span>PAJAK ({storeSettings?.taxRate || 0}%)</span>
               <span>{formatCurrency(transaction.tax)}</span>
             </div>
             <div className="flex justify-between font-black text-xs pt-3 border-t border-slate-900 text-slate-900">
@@ -257,7 +257,7 @@ Kembalian:  ${formatCurrency(transaction.change)}
           </div>
 
           <div className="mt-6 text-center py-4 border-t border-slate-100">
-             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-relaxed">{storeSettings.footerMessage}</p>
+             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-relaxed">{storeSettings?.footerMessage || '-'}</p>
           </div>
         </div>
         {/* Tear Edge Simulation */}

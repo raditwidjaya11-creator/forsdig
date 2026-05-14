@@ -250,7 +250,13 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
   },
 
   fetchUserProfile: async (userId) => {
+    if (!userId) {
+      console.warn("[PPOB] fetchUserProfile dipanggil tanpa userId");
+      return;
+    }
+
     if (!isSupabaseConfigured || userId === 'demo-user-id') {
+      console.log("[PPOB] Menggunakan profil demo...");
       set({ userProfile: {
         id: userId,
         username: 'demo_user',
@@ -271,41 +277,58 @@ export const usePPOBStore = create<PPOBState>((set, get) => ({
     }
 
     try {
+      console.log(`[PPOB] Memulai fetchUserProfile untuk: ${userId}`);
       // Use backend proxy to bypass RLS/permission issues
       const response = await api.get(`/api/user/profile/${userId}`);
-      const data = response.data;
-
-      if (data) {
-        set({ userProfile: {
-          id: data.id,
-          username: data.username,
-          fullName: data.full_name,
-          email: data.email,
-          phone: data.phone,
-          role: data.role,
-          balance: Number(data.balance),
-          defaultMarkup: Number(data.default_markup || 0),
-          minMarkup: Number(data.min_markup || 0),
-          maxMarkup: Number(data.max_markup || 10000),
-          subscriptionStatus: data.subscription_status || 'active',
-          packageType: data.package_type || 'FREE',
-          status: data.status,
-          createdAt: data.created_at
-        }});
+      
+      if (!response.data || typeof response.data !== 'object') {
+        console.error("[PPOB] Response data profil tidak valid:", response.data);
+        throw new Error("Data profil tidak valid dari server");
       }
+
+      const data = response.data;
+      console.log("[PPOB] Data profil berhasil diterima:", data);
+
+      set({ userProfile: {
+        id: data.id,
+        username: data.username || `user_${data.id?.substring(0, 5)}`,
+        fullName: data.full_name || 'User',
+        email: data.email || '',
+        phone: data.phone || '',
+        role: data.role || 'kasir',
+        balance: Number(data.balance || 0),
+        defaultMarkup: Number(data.default_markup || 0),
+        minMarkup: Number(data.min_markup || 0),
+        maxMarkup: Number(data.max_markup || 10000),
+        subscriptionStatus: data.subscription_status || 'active',
+        packageType: data.package_type || 'FREE',
+        status: data.status || 'active',
+        createdAt: data.created_at || Date.now()
+      }});
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error || err.message;
-      console.error("[PPOB] Fetch Profile Error:", errorMsg);
+      const errorData = err.response?.data;
+      const errorInfo = typeof errorData === 'string' ? errorData : (errorData?.error || errorData?.message);
+      const errorMsg = errorInfo || err.message || "Unknown error";
+      
+      console.error("[PPOB] Fetch Profile Error Detail:", {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
       
       let friendlyError = `Gagal memuat profil: ${errorMsg}`;
       
-      if (errorMsg.includes('permission denied')) {
-        friendlyError = "Izin ditolak untuk mengakses tabel 'profiles'. Pastikan SUPABASE_SERVICE_ROLE_KEY di server sudah benar dan kebijakan RLS (Row Level Security) sudah dikonfigurasi.";
-      } else if (errorMsg.includes('column') && errorMsg.includes('does not exist')) {
-        friendlyError = `Struktur tabel 'profiles' tidak sesuai (kolom hilang: ${errorMsg}). Silakan jalankan ulang SQL schema di dashboard Supabase.`;
+      // Safe string check for includes
+      const safeErrorMsg = String(errorMsg).toLowerCase();
+      
+      if (safeErrorMsg.includes('permission denied')) {
+        friendlyError = "Izin ditolak untuk mengakses tabel 'profiles'.";
+      } else if (safeErrorMsg.includes('not found') || err.response?.status === 404) {
+        friendlyError = "Profil pengguna tidak ditemukan di sistem.";
       }
       
       set({ error: friendlyError });
+      toast.error(friendlyError);
     }
   },
 

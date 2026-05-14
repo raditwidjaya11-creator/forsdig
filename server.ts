@@ -237,6 +237,11 @@ async function startServer() {
   app.get("/api/user/profile/:userId", async (req, res) => {
     try {
       const { userId } = req.params;
+      console.log(`[SERVER] API GET /api/user/profile/${userId}`);
+
+      if (!userId || userId === 'undefined' || userId === 'null') {
+        return res.status(400).json({ error: "Invalid User ID disediakan" });
+      }
 
       if (!supabaseUrl || !supabaseServiceKey || supabaseUrl.includes('placeholder')) {
         return res.status(500).json({ 
@@ -249,52 +254,41 @@ async function startServer() {
         .from("profiles")
         .select("*")
         .eq("id", userId)
-        .single();
+        .maybeSingle(); // maybeSingle doesn't throw error if not found
       
       if (error) {
         console.error(`[SERVER] Profile Fetch DB Error for ${userId}:`, error.message);
-        
-        if (error.message.includes("permission denied")) {
-          return res.status(403).json({
-            error: "Izin ditolak untuk mengakses tabel 'profiles'. Pastikan SUPABASE_SERVICE_ROLE_KEY benar dan GRANT permissions sudah dijalankan di Supabase.",
-            code: "PERMISSION_DENIED"
-          });
-        }
-
-        if (error.code === 'PGRST116') {
-          // Auto-create profile if missing (Admin context using service_role)
-          const { data: newProfile, error: createErr } = await supabase
-            .from("profiles")
-            .insert({ 
-              id: userId, 
-              username: `user_${userId.substring(0, 5)}`,
-              full_name: 'New User',
-              balance: 0,
-              role: 'kasir',
-              status: 'active'
-            })
-            .select()
-            .single();
-          
-          if (createErr) {
-            console.error(`[SERVER] Profile Creation Error for ${userId}:`, createErr.message);
-            if (createErr.message.includes("permission denied")) {
-              return res.status(403).json({
-                error: "Izin ditolak saat membuat profil. Pastikan Service Role Key memiliki akses INSERT ke tabel 'profiles'.",
-                code: "PERMISSION_DENIED"
-              });
-            }
-            throw createErr;
-          }
-          return res.json(newProfile);
-        }
-        throw error;
+        return res.status(500).json({ error: error.message, code: error.code });
       }
+      
+      if (!data) {
+        console.log(`[SERVER] Profile not found for ${userId}. Attempting to auto-create...`);
+        // Auto-create profile if missing (Admin context using service_role)
+        const { data: newProfile, error: createErr } = await supabase
+          .from("profiles")
+          .insert({ 
+            id: userId, 
+            username: `user_${userId.substring(0, 5)}`,
+            full_name: 'New User',
+            balance: 0,
+            role: 'kasir',
+            status: 'active'
+          })
+          .select()
+          .single();
+        
+        if (createErr) {
+          console.error(`[SERVER] Profile Auto-Creation Error for ${userId}:`, createErr.message);
+          return res.status(500).json({ error: "Gagal membuat profil otomatis", details: createErr.message });
+        }
+        return res.json(newProfile);
+      }
+
       res.json(data);
     } catch (error: unknown) {
       const err = error as Error;
-      console.error("Profile Fetch Error:", err.message);
-      res.status(500).json({ error: err.message });
+      console.error("[SERVER] Profile Endpoint Critical Error:", err.message);
+      res.status(500).json({ error: "Internal Server Error", message: err.message });
     }
   });
 
