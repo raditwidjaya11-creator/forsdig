@@ -20,7 +20,11 @@ interface DisplayState {
   storeLogo?: string;
 }
 
-const CustomerDisplay = memo(() => {
+interface CustomerDisplayProps {
+  isEmbed?: boolean;
+}
+
+const CustomerDisplay = memo(({ isEmbed = false }: CustomerDisplayProps) => {
   const [state, setState] = useState<DisplayState>({ type: 'idle' });
   const [promoIndex, setPromoIndex] = useState(0);
 
@@ -274,6 +278,29 @@ const CustomerDisplay = memo(() => {
       </motion.div>
     </div>
   );
+
+  if (isEmbed) {
+    return (
+      <div className="w-full border border-slate-200 bg-slate-150 rounded-2xl dark:border-slate-800 dark:bg-slate-950 shadow-inner overflow-hidden flex items-center justify-center p-3">
+        <div className="relative w-[1024px] h-[576px] shrink-0 border border-slate-700/50 rounded-xl overflow-hidden shadow-2xl bg-slate-950 scale-[0.38] sm:scale-[0.48] md:scale-[0.68] lg:scale-[0.75] xl:scale-[0.82] origin-center -my-[170px] sm:-my-[140px] md:-my-[80px] lg:-my-[70px] xl:-my-[40px] select-none">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={state.type}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full w-full pointer-events-none"
+            >
+              {state.type === 'idle' && renderIdle()}
+              {state.type === 'cart' && renderCart()}
+              {state.type === 'payment' && renderPayment()}
+              {state.type === 'success' && renderSuccess()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[9999] bg-white font-sans overflow-hidden">

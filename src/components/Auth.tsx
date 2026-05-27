@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, User as UserIcon, Mail, LogIn, UserPlus, ShieldCheck, Store, Loader2, AlertTriangle } from 'lucide-react';
 import { UserProfile } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { fetchProfile, saveData } from '../services/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
 
 interface AuthProps {
-  onLogin: (user: UserProfile, isSignup?: boolean) => void;
+  onLogin?: (user: UserProfile, isSignup?: boolean) => void;
 }
 
 export default function Auth({ onLogin }: AuthProps) {
+  const { login } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,52 +27,33 @@ export default function Auth({ onLogin }: AuthProps) {
     setIsLoading(true);
 
     try {
-      if (!isSupabaseConfigured) {
-        // Log in to Demo mode directly
-        localStorage.setItem('pos_demo_logged_in', 'true');
-        onLogin({
-          id: 'demo-user-id',
-          username: 'demo_user',
-          fullName: 'Demo Usaha',
-          email: email || 'demo@forsdig.com',
-          phone: phone || '08123456789',
-          role: 'admin',
-          balance: 1000000,
-          subscriptionStatus: 'active',
-          packageType: 'FREE',
-          status: 'active',
-          createdAt: Date.now()
-        });
-        return;
-      }
-
-      if (isLogin) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (signInError) throw signInError;
-      } else {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-              phone: phone,
-            },
-          },
-        });
-
-        if (signUpError) throw signUpError;
-
-        if (data.user && !data.session) {
-          setSuccess('Pendaftaran berhasil! Silakan periksa email Anda untuk verifikasi.');
+      const result = await login(email, password, fullName, phone, !isLogin);
+      if (result.success) {
+        if (result.message) {
+          setSuccess(result.message);
         }
+        if (onLogin) {
+          // Backward compatibility if parent expects a callback
+          onLogin({
+            id: isSupabaseConfigured ? 'temp' : 'demo-user-id',
+            username: isSupabaseConfigured ? email.split('@')[0] : 'demo_user',
+            fullName: isSupabaseConfigured ? fullName : 'Demo Usaha',
+            email: email || 'demo@forsdig.com',
+            phone: phone || '08123456789',
+            role: 'admin',
+            balance: isSupabaseConfigured ? 0 : 1000000,
+            subscriptionStatus: 'active',
+            packageType: 'FREE',
+            status: 'active',
+            createdAt: Date.now()
+          }, !isLogin);
+        }
+      } else {
+        setError(result.message || 'Gagal memproses otentikasi. Periksa koneksi data Anda.');
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      setError(err.message || 'Terjadi kesalahan saat otentikasi');
+      console.error('Auth error in component:', err);
+      setError(err.message || 'Terjadi kesalahan sistem saat otentikasi');
     } finally {
       setIsLoading(false);
     }

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { StoreSettings as StoreSettingsType } from '../types';
 import { Settings, Save, Store, MapPin, Phone, MessageSquare, Percent, Mail, Image as ImageIcon, X, Bluetooth as BluetoothIcon, QrCode, RefreshCcw, Cloud, Monitor } from 'lucide-react';
 import { motion } from 'motion/react';
+import CustomerDisplay from './CustomerDisplay';
+import { toast } from 'sonner';
 
 interface StoreSettingsProps {
   settings: StoreSettingsType;
@@ -18,6 +20,34 @@ export default function StoreSettings({
 }: StoreSettingsProps) {
   const [logoPreview, setLogoPreview] = useState<string>(settings?.logo || '');
   const [displayLogoPreview, setDisplayLogoPreview] = useState<string>(settings?.displayConfig?.displayLogo || '');
+
+  const [welcomeText, setWelcomeText] = useState(settings?.displayConfig?.welcomeText || 'Selamat Datang!');
+  const [promoTexts, setPromoTexts] = useState(settings?.displayConfig?.promoTexts?.join(', ') || '');
+
+  useEffect(() => {
+    if (settings?.displayConfig) {
+      setWelcomeText(settings.displayConfig.welcomeText || 'Selamat Datang!');
+      setPromoTexts(settings.displayConfig.promoTexts?.join(', ') || '');
+    }
+  }, [settings]);
+
+  useEffect(() => {
+    if (!settings) return;
+    const channel = new BroadcastChannel('pos_customer_display');
+    channel.postMessage({
+      type: 'idle',
+      config: {
+        welcomeText: welcomeText,
+        promoTexts: promoTexts.split(',').map(t => t.trim()).filter(Boolean),
+        displayLogo: displayLogoPreview,
+      },
+      storeName: settings?.name || 'ForsDig POS',
+      storeLogo: displayLogoPreview || logoPreview || settings?.logo
+    });
+    return () => {
+      channel.close();
+    };
+  }, [welcomeText, promoTexts, displayLogoPreview, logoPreview, settings]);
 
   if (!settings) {
     return (
@@ -309,7 +339,8 @@ export default function StoreSettings({
                     </label>
                     <input
                       name="welcomeText"
-                      defaultValue={settings.displayConfig?.welcomeText}
+                      value={welcomeText}
+                      onChange={(e) => setWelcomeText(e.target.value)}
                       placeholder="Contoh: Selamat Datang di Toko Kami!"
                       className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold text-slate-800"
                     />
@@ -318,15 +349,55 @@ export default function StoreSettings({
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                       <Percent size={14} className="text-red-500" />
-                      Teks Promo
+                      Teks Promo (Dipisahkan koma)
                     </label>
                     <textarea
                       name="promoTexts"
-                      defaultValue={settings.displayConfig?.promoTexts?.join(', ')}
+                      value={promoTexts}
+                      onChange={(e) => setPromoTexts(e.target.value)}
                       placeholder="Promo 1, Promo 2..."
-                      rows={3}
+                      rows={2}
                       className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold text-slate-800 resize-none"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons to launch Customer Display */}
+              <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 p-6 rounded-3xl space-y-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">Opsi Aktivasi Display</h4>
+                    <p className="text-xs text-slate-500">Gunakan layar sekunder/monitor kedua agar pelanggan dapat memantau pesanan dan melakukan scan QRIS secara real-time.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = window.location.origin + window.location.pathname + '#/customer-display';
+                      const win = window.open(url, '_blank', 'width=1280,height=720,menubar=no,status=no,toolbar=no');
+                      if (!win) {
+                        toast.warning('Pop-up terblokir! Silakan izinkan pop-up di browser Anda, atau buka link ini secara manual: ' + url, {
+                          duration: 8000
+                        });
+                      } else {
+                        toast.success('Layar pelanggan berhasil dibuka di jendela baru!');
+                      }
+                    }}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl font-black text-xs hover:bg-slate-800 dark:hover:bg-white active:scale-95 transition-all shadow-md"
+                  >
+                    <Monitor size={16} />
+                    BUKA MONITOR EKSTERNAL
+                  </button>
+                </div>
+
+                {/* Live Sandbox Preview Element */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping"></span>
+                    Live Preview (Simulasi tampilan di monitor pelanggan)
+                  </span>
+                  <div className="w-full">
+                    <CustomerDisplay isEmbed={true} />
                   </div>
                 </div>
               </div>

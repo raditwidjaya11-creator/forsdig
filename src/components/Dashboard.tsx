@@ -1,9 +1,10 @@
 import React, { useState, useMemo, memo, useRef, useEffect } from 'react';
 import { Product, Category } from '../types';
-import { Search, Filter, Grid, List as ListIcon, ShoppingBag, Plus, Scan } from 'lucide-react';
+import { Search, Filter, Grid, List as ListIcon, ShoppingBag, Plus, Scan, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from '../lib/utils';
 import BarcodeScanner from './BarcodeScanner';
+import { toast } from 'sonner';
 
 interface DashboardProps {
   products: Product[];
@@ -11,70 +12,135 @@ interface DashboardProps {
   onAddToCart: (p: Product) => void;
 }
 
-const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToCart: (p: Product) => void }) => (
-  <motion.div
-    layout
-    initial={{ opacity: 0, scale: 0.9 }}
-    animate={{ opacity: 1, scale: 1 }}
-    exit={{ opacity: 0, scale: 0.9 }}
-    whileTap={{ scale: 0.98 }}
-    onClick={() => onAddToCart(product)}
-    className="product-card bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col group cursor-pointer active:bg-slate-50 transition-colors"
-  >
-    <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 mb-2 sm:mb-4 flex items-center justify-center">
-      <img
-        src={product.image}
-        alt={product.name}
-        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-        loading="lazy"
-      />
-      <div className="absolute inset-0 bg-red-900/0 group-hover:bg-red-900/10 transition-all" />
-      {product.stock <= (product.minStock || 0) && (
-        <div className="absolute top-1 left-1 sm:top-2 sm:left-2 bg-red-100 text-red-600 text-[8px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm border border-red-200">
-          Stok: {product.stock}
-        </div>
-      )}
-      {product.sku && (
-        <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 bg-black/50 text-white text-[7px] sm:text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
-          {product.sku}
-        </div>
-      )}
-    </div>
-    
-    <div className="flex-1 flex flex-col pt-0 sm:pt-1">
-      <h3 className="text-[11px] sm:text-sm font-bold text-slate-800 line-clamp-2 leading-tight mb-1 uppercase">
-        {product.name}
-      </h3>
-      <div className="mt-auto">
-        <p className="text-[9px] sm:text-xs text-slate-500 mb-1.5 sm:mb-2">{product.category}</p>
-        <div className="flex items-center justify-between">
-          <span className="text-red-600 font-bold text-xs sm:text-sm tracking-tight">{formatCurrency(product.price)}</span>
-          <div className="w-6 h-6 sm:w-8 sm:h-8 bg-red-50 text-red-600 rounded-lg flex items-center justify-center group-hover:bg-red-600 group-hover:text-white transition-all shadow-sm">
-            <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToCart: (p: Product) => void }) => {
+  const isOutOfStock = product.stock <= 0;
+  const isLowStock = !isOutOfStock && product.stock <= (product.minStock || 0);
+
+  const handleClick = () => {
+    if (isOutOfStock) {
+      toast.error(`Stok ${product.name} habis! Hubungi admin/supplier untuk re-order.`, { icon: '🚫' });
+      return;
+    }
+    onAddToCart(product);
+  };
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      whileTap={isOutOfStock ? {} : { scale: 0.98 }}
+      onClick={handleClick}
+      className={`product-card p-2.5 sm:p-4 rounded-xl border shadow-sm flex flex-col group transition-all relative ${
+        isOutOfStock
+          ? 'bg-slate-50 border-slate-200 select-none cursor-not-allowed opacity-60'
+          : isLowStock
+            ? 'bg-amber-50/10 border-amber-300 dark:border-amber-700/50 hover:border-amber-400 hover:shadow-md cursor-pointer'
+            : 'bg-white border-slate-200 hover:border-red-250 hover:shadow-md cursor-pointer active:bg-slate-50'
+      }`}
+    >
+      <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 mb-2 sm:mb-4 flex items-center justify-center">
+        <img
+          src={product.image}
+          alt={product.name}
+          className={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? '' : 'group-hover:scale-110'}`}
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-red-900/0 transition-all group-hover:bg-red-900/5" />
+        
+        {/* Out of Stock Overlay */}
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-2">
+            <span className="bg-red-600 text-white text-[9px] sm:text-[11px] font-black tracking-widest px-2.5 py-1 rounded-md uppercase shadow-lg border border-red-500 whitespace-nowrap">
+              Stok Habis
+            </span>
+          </div>
+        )}
+
+        {/* Low Stock Indicator Badge */}
+        {!isOutOfStock && isLowStock && (
+          <div className="absolute top-1 left-1 sm:top-2 sm:left-2 bg-amber-500 text-white text-[8px] sm:text-[9px] font-black px-2 py-0.5 sm:py-1 rounded-md uppercase tracking-wider shadow-md border border-amber-400 flex items-center gap-1.5 z-10 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-white block animate-ping"></span>
+            Stok Kritis: {product.stock}
+          </div>
+        )}
+
+        {/* Regular Stock Badge */}
+        {!isOutOfStock && !isLowStock && product.stock <= (product.minStock || 0) * 1.5 && (
+          <div className="absolute top-1 left-1 sm:top-2 sm:left-2 bg-slate-100 text-slate-700 text-[8px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
+            Sisa: {product.stock}
+          </div>
+        )}
+
+        {product.sku && (
+          <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 bg-black/50 text-white text-[7px] sm:text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+            {product.sku}
+          </div>
+        )}
+      </div>
+      
+      <div className="flex-1 flex flex-col pt-0 sm:pt-1">
+        <h3 className="text-[11px] sm:text-sm font-bold text-slate-800 line-clamp-2 leading-tight mb-1 uppercase flex items-start gap-1">
+          {isLowStock && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 self-center" />}
+          {product.name}
+        </h3>
+        <div className="mt-auto">
+          <p className="text-[9px] sm:text-xs text-slate-500 mb-1.5 sm:mb-2">{product.category}</p>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-red-600 font-bold text-xs sm:text-sm tracking-tight">{formatCurrency(product.price)}</span>
+              {isLowStock && (
+                <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">Min Stok: {product.minStock}</span>
+              )}
+            </div>
+            
+            {!isOutOfStock && (
+              <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all shadow-sm ${
+                isLowStock 
+                  ? 'bg-amber-100 text-amber-700 hover:bg-amber-600 hover:text-white' 
+                  : 'bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white'
+              }`}>
+                <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+              </div>
+            )}
           </div>
         </div>
       </div>
-    </div>
-  </motion.div>
-));
+    </motion.div>
+  );
+});
 
 export default function Dashboard({ products, categories, onAddToCart }: DashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Semua');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const hasShownToast = useRef(false);
 
+  // Auto trigger alert on page load if there are low stock items
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Hotkey to focus search with '/' slash key
-      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
+    if (!hasShownToast.current && products.length > 0) {
+      const lowStockList = products.filter(p => p.isActive && p.stock <= (p.minStock || 0));
+      if (lowStockList.length > 0) {
+        toast.warning(
+          `Terdeteksi ${lowStockList.length} produk dengan stok kritis atau habis!`, 
+          { 
+            description: 'Segera cek tabel peringatan stok di atas daftar produk atau hubungi supplier.',
+            icon: '⚠️',
+            duration: 8000,
+            id: 'low-stock-global-alert'
+          }
+        );
+        hasShownToast.current = true;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    }
+  }, [products]);
+
+  // Compute low stock items for dashboard alert notification banner
+  const lowStockProducts = useMemo(() => {
+    return products.filter(p => p.isActive && p.stock <= (p.minStock || 0));
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -163,6 +229,53 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
             ))}
           </div>
         </div>
+
+        {/* Low Stock Warning Banner */}
+        {lowStockProducts.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            id="low-stock-banner"
+            className="bg-amber-50 dark:bg-amber-950/20 border border-amber-250 dark:border-amber-900/50 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-xl relative shrink-0">
+                <AlertTriangle size={20} className="relative z-10 animate-bounce" />
+                <span className="absolute inset-0 bg-amber-400 rounded-xl filter blur-sm opacity-30 animate-pulse"></span>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 font-sans tracking-tight">
+                  Peringatan: {lowStockProducts.length} Produk Menyentuh Batas Stok Minimum!
+                </h4>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                  Persediaan hampir habis. Pastikan untuk segera memesan ulang barang ke supplier agar operasional tidak terganggu.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1.5 md:pb-0 scrollbar-hide py-1 shrink-0">
+              {lowStockProducts.slice(0, 4).map(p => (
+                <div 
+                  key={p.id}
+                  onClick={() => {
+                    setSearchTerm(p.name);
+                    searchInputRef.current?.focus();
+                  }}
+                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-white dark:bg-slate-900 border border-amber-200 hover:border-amber-400 dark:border-amber-800 hover:shadow-sm py-1.5 px-3 rounded-xl text-amber-800 dark:text-amber-300 cursor-pointer transition-all"
+                  title="Klik untuk menyaring produk"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 block"></span>
+                  {p.name} ({p.stock} {p.unit || 'pcs'})
+                </div>
+              ))}
+              {lowStockProducts.length > 4 && (
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100/50 hover:bg-amber-100/80 dark:bg-amber-950/30 py-1.5 px-3 rounded-xl align-middle self-center">
+                  +{lowStockProducts.length - 4} Lainnya
+                </span>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Product Grid - Professional Polish Theme */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-4 md:gap-4">

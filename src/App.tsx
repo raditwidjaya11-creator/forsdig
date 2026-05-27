@@ -12,6 +12,8 @@ const QRManager = lazy(() => import('./components/QRManager'));
 const StaffManager = lazy(() => import('./components/StaffManager'));
 const PromotionManager = lazy(() => import('./components/PromotionManager'));
 const VoucherReports = lazy(() => import('./components/VoucherReports'));
+const PartnerManager = lazy(() => import('./components/PartnerManager'));
+const CustomerDisplay = lazy(() => import('./components/CustomerDisplay'));
 
 import Cart from './components/Cart';
 import PaymentModal from './components/PaymentModal';
@@ -33,9 +35,11 @@ import {
   Ticket,
   Keyboard,
   HelpCircle,
-  X
+  X,
+  Truck,
+  Monitor
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured, setCachedUserId } from './lib/supabase';
+import { useAuth } from './hooks/useAuth';
 import { generateUUID } from './lib/utils';
 import LoadingScreen from './components/LoadingScreen';
 
@@ -46,10 +50,20 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const isMounted = useRef(true);
+
+  const [hash, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const handleHashChange = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const isCustomerDisplayRoute = hash === '#/customer-display' || hash === '#customer-display';
   
   // Stores
   const {
     products, categories, transactions, paymentQrs, storeSettings, vouchers,
+    suppliers, customers, purchaseOrders, debts,
     fetchInitialData, addTransaction, updateProduct, deleteProduct,
     addProduct, addCategory, updateCategory, deleteCategory, syncEntity,
     setCategories
@@ -61,7 +75,96 @@ export default function App() {
     fetchMutations
   } = useUserStore();
 
-  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'laporan' | 'pengaturan' | 'qr' | 'promosi' | 'karyawan' | 'laporan_voucher'>('kasir');
+  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'laporan' | 'pengaturan' | 'qr' | 'promosi' | 'karyawan' | 'laporan_voucher' | 'mitra'>('kasir');
+
+  // Callback handlers for Supplier and Client Partner Manager
+  const handleAddSupplier = useCallback(async (s: any) => {
+    try {
+      await syncEntity('suppliers', s);
+      await fetchInitialData();
+      toast.success('Supplier berhasil ditambahkan');
+    } catch (err) {
+      toast.error('Gagal menambahkan supplier');
+    }
+  }, [syncEntity, fetchInitialData]);
+
+  const handleAddClient = useCallback(async (c: any) => {
+    try {
+      await syncEntity('customers', c);
+      await fetchInitialData();
+      toast.success('Pelanggan berhasil ditambahkan');
+    } catch (err) {
+      toast.error('Gagal menambahkan pelanggan');
+    }
+  }, [syncEntity, fetchInitialData]);
+
+  const handleAddPurchase = useCallback(async (p: any) => {
+    try {
+      await syncEntity('purchase_orders', p);
+      if (p.paymentStatus === 'Hutang') {
+        const debt = {
+          id: generateUUID(),
+          partnerId: p.supplierId,
+          partnerType: 'Supplier' as const,
+          type: 'Hutang' as const,
+          amount: p.total,
+          remainingAmount: p.total,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          status: 'Belum Lunas' as const,
+          referenceId: p.id,
+          timestamp: new Date().toISOString(),
+          payments: []
+        };
+        await syncEntity('debts', debt);
+      }
+      await fetchInitialData();
+      toast.success('PO Pembelian Berhasil Dibuat');
+    } catch (err) {
+      toast.error('Gagal membuat PO Pembelian');
+    }
+  }, [syncEntity, fetchInitialData]);
+
+  const handleReceivePurchase = useCallback(async (p: any) => {
+    try {
+      const updatedPO = {
+        ...p,
+        status: 'Diterima' as const,
+        receivedAt: new Date().toISOString()
+      };
+      await syncEntity('purchase_orders', updatedPO);
+
+      for (const item of p.items) {
+        const product = products.find(pr => pr.id === item.productId);
+        if (product) {
+          const updatedProduct = {
+            ...product,
+            stock: (product.stock || 0) + item.quantity
+          };
+          await syncEntity('products', updatedProduct);
+        }
+      }
+
+      await fetchInitialData();
+      toast.success('Pesanan berhasil diterima dan stok telah ditambahkan');
+    } catch (err) {
+      toast.error('Gagal memproses penerimaan pesanan');
+    }
+  }, [products, syncEntity, fetchInitialData]);
+
+  const handleUpdateDebt = useCallback(async (d: any) => {
+    try {
+      await syncEntity('debts', d);
+      await fetchInitialData();
+      toast.success('Status hutang/piutang berhasil diperbarui');
+    } catch (err) {
+      toast.error('Gagal memperbarui status');
+    }
+  }, [syncEntity, fetchInitialData]);
+
+  const handlePartnerInvoice = useCallback((t: any, custNamePhone?: any) => {
+    setSelectedInvoice(t);
+    setSelectedCustomer(custNamePhone);
+  }, []);
   const [posSubTab, setPosSubTab] = useState<'produk' | 'riwayat'>('produk');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showPayment, setShowPayment] = useState(false);
@@ -71,256 +174,52 @@ export default function App() {
   const [selectedCustomer, setSelectedCustomer] = useState<{ name: string; address?: string; phone?: string; email?: string; type?: string } | undefined>(undefined);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Use our centralized authentication provider state and operations
+  const { authState, isSyncing: isAuthSyncing, logout } = useAuth();
+  const [isLocalSyncing, setIsLocalSyncing] = useState(false);
+  const isSyncing = isAuthSyncing || isLocalSyncing;
+
   const [discount, setDiscount] = useState(0);
   const [appliedVoucherCode, setAppliedVoucherCode] = useState<string | null>(null);
 
-  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
-  const authStateRef = useRef(authState);
-  const lastProcessedUserRef = useRef<string | null>(null);
-
+  // Sync cashier workspace state (cart, total) with Customer Secondary Display in real-time
   useEffect(() => {
-    authStateRef.current = authState;
-  }, [authState]);
+    if (!storeSettings) return;
 
-  useEffect(() => {
-    let isSubscribed = true;
-
-    // Helper for robust profile fetching with retries (defensive programming)
-    const fetchProfileWithRetry = async (userId: string, retries = 3, initialDelay = 400): Promise<boolean> => {
-      let delay = initialDelay;
-      for (let i = 0; i < retries; i++) {
-        if (!isSubscribed) return false;
-        console.log(`[ForsDig POS] [Profile Fetch Attempt ${i + 1}/${retries}] Fetching profile for user: ${userId}`);
-        
-        try {
-          const success = await fetchUserProfile(userId);
-          if (success) {
-            console.log(`[ForsDig POS] Profile successfully loaded on attempt ${i + 1}`);
-            return true;
-          }
-        } catch (err) {
-          console.error(`[ForsDig POS] Attempt ${i + 1} failed with error:`, err);
-        }
-
-        if (i < retries - 1) {
-          console.warn(`[ForsDig POS] Profile not found or not created yet. Retrying in ${delay}ms...`);
-          if (i === 1) {
-            toast.info("Menyiapkan profil Anda, mohon tunggu...");
-          }
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 1.5; // Exponential backoff (e.g., 400ms, 600ms)
-        }
-      }
-      return false;
+    const channel = new BroadcastChannel('pos_customer_display');
+    const commonData = {
+      config: storeSettings?.displayConfig,
+      storeName: storeSettings?.name,
+      storeLogo: storeSettings?.logo
     };
 
-    const checkUser = async () => {
-      // Set a safety timeout to transition out of 'loading' state no matter what
-      const timeoutId = setTimeout(() => {
-        if (isSubscribed && authStateRef.current === 'loading') {
-          console.warn('[ForsDig POS] Startup timeout (15s) reached. Forcing unauthenticated/fallback state.');
-          setAuthState('unauthenticated');
-        }
-      }, 15000);
-
-      try {
-        if (!isSupabaseConfigured) {
-          const isDemoLocal = localStorage.getItem('pos_demo_logged_in') === 'true';
-          if (isDemoLocal) {
-            setIsSyncing(true);
-            const profileSuccess = await fetchUserProfile('demo-user-id');
-            if (profileSuccess) {
-              setAuthState('authenticated');
-              setLastSync(Date.now());
-            } else {
-              setAuthState('unauthenticated');
-            }
-            setIsSyncing(false);
-          } else {
-            setAuthState('unauthenticated');
-          }
-          return;
-        }
-
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) throw sessionError;
-        if (!isSubscribed) return;
-
-        console.log("[ForsDig POS] Initial session check:", session?.user?.id ? `User ${session.user.id}` : "No Active Session");
-        
-        if (session?.user) {
-          const userId = session.user.id;
-          setCachedUserId(userId);
-
-          if (lastProcessedUserRef.current === userId) {
-            console.log(`[ForsDig POS] Startup session check: User ${userId} is already being processed.`);
-            return;
-          }
-          lastProcessedUserRef.current = userId;
-
-          setIsSyncing(true);
-          const profileSuccess = await fetchProfileWithRetry(userId);
-          
-          if (!isSubscribed) return;
-          
-          if (profileSuccess) {
-            setAuthState('authenticated');
-            setLastSync(Date.now());
-
-            Promise.allSettled([
-              fetchInitialData(),
-              fetchMutations(userId)
-            ]).finally(() => {
-              if (isSubscribed) setIsSyncing(false);
-            });
-          } else {
-            console.error('[ForsDig POS] Profile initialization failed after all retries in initial check.');
-            toast.error("Profil pengguna belum siap atau gagal dimuat dari Supabase. Silakan coba masuk kembali.");
-            setAuthState('unauthenticated');
-            setIsSyncing(false);
-          }
-        } else {
-          setAuthState('unauthenticated');
-        }
-      } catch (authErr: any) {
-        console.error('[ForsDig POS] Error during startup auth check:', authErr);
-        toast.error(`Kesalahan inisialisasi sesi atau jaringan terputus. Silakan masuk kembali.`);
-        if (isSubscribed) setAuthState('unauthenticated');
-      } finally {
-        clearTimeout(timeoutId);
+    if (cart.length === 0) {
+      channel.postMessage({ type: 'idle', ...commonData });
+    } else {
+      // Only broadcast if checkout screen is not open (since PaymentModal handles payment screen state)
+      if (!showPayment) {
+        const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const tax = Math.round(subtotal * ((storeSettings.taxRate || 10) / 100));
+        const calculatedTotal = subtotal + tax - discount;
+        channel.postMessage({
+          type: 'cart',
+          items: cart,
+          total: Math.max(0, calculatedTotal),
+          ...commonData
+        });
       }
-    };
-
-    checkUser();
-
-    if (!isSupabaseConfigured) {
-      return () => {
-        isSubscribed = false;
-      };
     }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isSubscribed) return;
-      console.log(`[ForsDig POS] Database Auth Event Triggered: ${event} for user: ${session?.user?.id || 'None'}`);
-      
-      const userId = session?.user?.id || null;
-      setCachedUserId(userId);
-
-      if (!userId) {
-        lastProcessedUserRef.current = null;
-        setAuthState('unauthenticated');
-        return;
-      }
-
-      if (lastProcessedUserRef.current === userId) {
-        console.log(`[ForsDig POS] Auth State Change de-duplicated for user ${userId}.`);
-        if (authStateRef.current === 'loading') {
-          setAuthState('authenticated');
-        }
-        return;
-      }
-      lastProcessedUserRef.current = userId;
-
-      setIsSyncing(true);
-      try {
-        const profileSuccess = await fetchProfileWithRetry(userId);
-        
-        if (!isSubscribed) return;
-
-        if (profileSuccess) {
-          setAuthState('authenticated');
-          setLastSync(Date.now());
-          
-          Promise.allSettled([
-            fetchInitialData(),
-            fetchMutations(userId)
-          ]).finally(() => {
-            if (isSubscribed) setIsSyncing(false);
-          });
-        } else {
-          console.error("[ForsDig POS] Profile fetch failed on Auth State Change after all retries.");
-          toast.error("Gagal menyinkronkan profil Anda dengan cloud. Sesi dibatalkan.", { duration: 5000 });
-          setAuthState('unauthenticated');
-          setIsSyncing(false);
-        }
-      } catch (err: any) {
-        console.error('[ForsDig POS] Auth State change profile resolution error:', err);
-        toast.error(`Gagal memuat detail profil Anda: ${err.message || err}`);
-        if (isSubscribed) {
-          setAuthState('unauthenticated');
-          setIsSyncing(false);
-        }
-      }
-    });
 
     return () => {
-      isSubscribed = false;
-      subscription.unsubscribe();
+      channel.close();
     };
-  }, []);
-
-  const handleLogin = useCallback(async () => {
-    setIsSyncing(true);
-    try {
-      if (!isSupabaseConfigured) {
-        localStorage.setItem('pos_demo_logged_in', 'true');
-        const success = await fetchUserProfile('demo-user-id');
-        if (success) {
-          setAuthState('authenticated');
-          setLastSync(Date.now());
-          toast.success("Masuk dalam Mode Demo (Offline)!");
-        } else {
-          toast.error("Gagal memulai Mode Demo.");
-          setAuthState('unauthenticated');
-        }
-        return;
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setCachedUserId(session.user.id);
-        const success = await fetchUserProfile(session.user.id);
-        if (success) {
-          setAuthState('authenticated');
-          await fetchInitialData();
-          setLastSync(Date.now());
-          toast.success("Selamat datang kembali!");
-        } else {
-          toast.error("Profil pengguna tidak ditemukan.");
-          setAuthState('unauthenticated');
-        }
-      }
-    } catch (err) {
-      console.error("[POS-AUTH] Login callback error:", err);
-      toast.error("Gagal memverifikasi sesi login.");
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [fetchUserProfile, fetchInitialData]);
+  }, [cart, showPayment, storeSettings, discount]);
 
   const handleLogout = useCallback(async () => {
-    try {
-      lastProcessedUserRef.current = null;
-      setCachedUserId(null);
-      if (!isSupabaseConfigured) {
-        localStorage.removeItem('pos_demo_logged_in');
-        setAuthState('unauthenticated');
-        setCart([]);
-        toast.success("Berhasil keluar dari Mode Demo.");
-        return;
-      }
-
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setAuthState('unauthenticated');
-      setCart([]);
-      toast.success("Berhasil keluar dari akun.");
-    } catch (err: any) {
-      toast.error(`Gagal logout: ${err.message}`);
-    }
-  }, []);
+    await logout();
+    setCart([]);
+  }, [logout]);
 
   useEffect(() => {
     const handleGlobalKeys = (e: KeyboardEvent) => {
@@ -381,6 +280,12 @@ export default function App() {
             e.preventDefault();
             setActiveTab('pengaturan');
             break;
+          case '9':
+          case 'u':
+          case 'n':
+            e.preventDefault();
+            setActiveTab('mitra');
+            break;
         }
       }
     };
@@ -394,7 +299,7 @@ export default function App() {
       toast.error("Anda sedang offline. Periksa koneksi internet.");
       return;
     }
-    setIsSyncing(true);
+    setIsLocalSyncing(true);
     try {
       if (user?.id) {
         await Promise.all([
@@ -407,7 +312,7 @@ export default function App() {
     } catch (err) {
       toast.error("Gagal menyinkronkan data.");
     } finally {
-      setIsSyncing(false);
+      setIsLocalSyncing(false);
     }
   }, [user?.id, fetchInitialData, fetchMutations]);
 
@@ -432,8 +337,31 @@ export default function App() {
   }, [handleSyncData]);
 
   const addToCart = (product: Product) => {
+    if (product.stock <= 0) {
+      toast.error(`Stok ${product.name} telah habis!`, { icon: '🚫' });
+      return;
+    }
+
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
+      const currentQty = existing ? existing.quantity : 0;
+      
+      if (currentQty + 1 > product.stock) {
+        toast.error(`Gagal menambah: Stok ${product.name} tidak mencukupi (Maksimal ${product.stock} ${product.unit || 'pcs'}).`, { icon: '⚠️' });
+        return prev;
+      }
+
+      const remainingStock = product.stock - (currentQty + 1);
+      if (remainingStock <= (product.minStock || 0)) {
+        if (remainingStock === 0) {
+          toast.warning(`Peringatan: Stok ${product.name} akan habis sepenuhnya jika transaksi ini selesai!`, { id: `low-stock-${product.id}`, icon: '🚫' });
+        } else {
+          toast.warning(`Stok Menipis: ${product.name} tersisa ${remainingStock} ${product.unit || 'pcs'} (Batas minimum: ${product.minStock || 0})`, { id: `low-stock-${product.id}`, icon: '⚠️' });
+        }
+      } else if (currentQty === 0) {
+        toast.success(`Ditambahkan ke keranjang: ${product.name}`, { id: `add-${product.id}`, icon: '📥' });
+      }
+
       if (existing) {
         return prev.map((item) =>
           item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
@@ -444,15 +372,34 @@ export default function App() {
   };
 
   const updateCartQuantity = (id: string, delta: number) => {
-    setCart((prev) =>
-      prev.map((item) => {
+    setCart((prev) => {
+      let isExceeded = false;
+      const updated = prev.map((item) => {
         if (item.id === id) {
           const newQty = Math.max(1, item.quantity + delta);
+          
+          if (newQty > item.stock) {
+            isExceeded = true;
+            toast.error(`Gagal menambah: Stok ${item.name} hanya tersisa ${item.stock} ${item.unit || 'pcs'}.`, { icon: '⚠️' });
+            return item;
+          }
+          
+          const remainingStock = item.stock - newQty;
+          if (remainingStock <= (item.minStock || 0)) {
+            if (remainingStock === 0) {
+              toast.warning(`Stok ${item.name} akan habis jika terjual!`, { id: `low-stock-${item.id}`, icon: '🚫' });
+            } else {
+              toast.warning(`Peringatan: Stok ${item.name} menipis (Sisa ${remainingStock} ${item.unit || 'pcs'})`, { id: `low-stock-${item.id}`, icon: '⚠️' });
+            }
+          }
+
           return { ...item, quantity: newQty };
         }
         return item;
-      })
-    );
+      });
+
+      return updated;
+    });
   };
 
   const removeFromCart = (id: string) => {
@@ -556,6 +503,17 @@ export default function App() {
     }
   };
 
+  // Fast-path Customer Display Bypass (Unauthenticated receiver)
+  if (isCustomerDisplayRoute) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-slate-950 font-sans overflow-hidden">
+        <Suspense fallback={<LoadingScreen message="Menyiapkan Monitor Pelanggan..." />}>
+          <CustomerDisplay />
+        </Suspense>
+      </div>
+    );
+  }
+
   // Render Layar Memuat Sistem Utama
   if (authState === 'loading') {
     return <LoadingScreen message="Menyiapkan Sistem Kasir ForsDig..." />;
@@ -565,7 +523,7 @@ export default function App() {
   if (authState === 'unauthenticated') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4">
-        <Auth onLogin={handleLogin} />
+        <Auth />
         <Toaster position="top-center" richColors />
       </div>
     );
@@ -580,6 +538,7 @@ export default function App() {
     { id: 'promosi', label: 'Promo & Banner', icon: Zap },
     { id: 'laporan_voucher', label: 'Laporan Voucher', icon: Ticket },
     { id: 'karyawan', label: 'Manajemen Staf', icon: Users },
+    { id: 'mitra', label: 'Suplier & Pelanggan', icon: Truck },
     { id: 'pengaturan', label: 'Pengaturan Toko', icon: Settings },
   ] as const;
 
@@ -653,7 +612,12 @@ export default function App() {
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 z-10 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold capitalize text-slate-800 dark:text-slate-100">
-              {activeTab === 'kasir' ? 'Mesin Kasir' : activeTab}
+              {activeTab === 'kasir' ? 'Mesin Kasir' : 
+               activeTab === 'mitra' ? 'Suplier & Pelanggan' : 
+               activeTab === 'laporan_voucher' ? 'Laporan Voucher' : 
+               activeTab === 'promosi' ? 'Promo & Banner' : 
+               activeTab === 'qr' ? 'Kelola QRIS' : 
+               activeTab === 'karyawan' ? 'Manajemen Staf' : activeTab}
             </h1>
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
               isOnline ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
@@ -697,6 +661,27 @@ export default function App() {
                 </button>
               </div>
             )}
+
+            {/* Quick access button to Customer Display Screen */}
+            <button
+              onClick={() => {
+                const url = window.location.origin + window.location.pathname + '#/customer-display';
+                const win = window.open(url, '_blank', 'width=1280,height=720,menubar=no,status=no,toolbar=no');
+                if (!win) {
+                  toast.warning('Pop-up terblokir! Silakan izinkan pop-up di browser Anda, atau kunjungi langsung: ' + url, {
+                    duration: 7000,
+                    id: 'pop-blocked'
+                  });
+                } else {
+                  toast.success('Layar sekunder pelanggan berhasil dibuka!');
+                }
+              }}
+              title="Mulai Monitor Pelanggan (Dual Display)"
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-705 dark:text-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all hover:shadow-sm active:scale-95"
+            >
+              <Monitor size={14} className="text-red-600 animate-pulse" />
+              <span className="hidden md:inline">Layar Pelanggan</span>
+            </button>
 
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
@@ -812,6 +797,24 @@ export default function App() {
                 {activeTab === 'promosi' && <PromotionManager />}
                 {activeTab === 'laporan_voucher' && <VoucherReports />}
                 {activeTab === 'karyawan' && <StaffManager />}
+                
+                {activeTab === 'mitra' && (
+                  <PartnerManager 
+                    suppliers={suppliers}
+                    clients={customers}
+                    purchaseOrders={purchaseOrders}
+                    debts={debts}
+                    products={products}
+                    transactions={transactions}
+                    storeSettings={storeSettings!}
+                    onAddSupplier={handleAddSupplier}
+                    onAddClient={handleAddClient}
+                    onAddPurchase={handleAddPurchase}
+                    onReceivePurchase={handleReceivePurchase}
+                    onUpdateDebt={handleUpdateDebt}
+                    onViewInvoice={handlePartnerInvoice}
+                  />
+                )}
                 
                 {activeTab === 'pengaturan' && (
                   <StoreSettings 
