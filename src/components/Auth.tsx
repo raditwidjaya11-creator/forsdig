@@ -27,7 +27,22 @@ export default function Auth({ onLogin }: AuthProps) {
 
     try {
       if (!isSupabaseConfigured) {
-        throw new Error('Konfigurasi Supabase tidak ditemukan. Harap hubungkan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.');
+        // Log in to Demo mode directly
+        localStorage.setItem('pos_demo_logged_in', 'true');
+        onLogin({
+          id: 'demo-user-id',
+          username: 'demo_user',
+          fullName: 'Demo Usaha',
+          email: email || 'demo@forsdig.com',
+          phone: phone || '08123456789',
+          role: 'admin',
+          balance: 1000000,
+          subscriptionStatus: 'active',
+          packageType: 'FREE',
+          status: 'active',
+          createdAt: Date.now()
+        });
+        return;
       }
 
       if (isLogin) {
@@ -81,14 +96,14 @@ export default function Auth({ onLogin }: AuthProps) {
 
         <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
           {!isSupabaseConfigured && (
-            <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+            <div className="bg-amber-50 px-6 py-4 border-b border-amber-100 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
                 <AlertTriangle size={20} />
               </div>
               <div>
-                <p className="text-xs font-black text-red-700 uppercase tracking-tight">Koneksi Database Terputus</p>
-                <p className="text-[10px] font-bold text-red-600/80 leading-tight mt-0.5">
-                  Variable VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY belum dikonfigurasi. Hubungi administrator.
+                <p className="text-xs font-black text-amber-700 uppercase tracking-tight">Mode Demo Offline Aktif</p>
+                <p className="text-[10px] font-bold text-amber-600/80 leading-tight mt-0.5">
+                  Gunakan email dan password apa saja untuk masuk ke demo lokal. Seluruh transaksi & fitur Smart POS aktif penuh.
                 </p>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CreditCard, Banknote, QrCode, Wallet, CheckCircle2, ScanLine, ArrowLeftRight, ChevronRight, Check, Activity, Users, Globe } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
@@ -105,6 +105,33 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
   const handleQuickCash = (amount: number) => {
     setAmountPaid(amount.toString());
   };
+
+  const cashSuggestions = useMemo(() => {
+    const list = new Set<number>();
+    const standardNotes = [2000, 5000, 10000, 20000, 50000, 100000];
+    
+    // Add standard single note values if higher than total
+    standardNotes.forEach(note => {
+      if (note > total) {
+        list.add(note);
+      }
+    });
+
+    // Add round ups of common intervals
+    const roundups = [5000, 10000, 20000, 50000, 100000];
+    roundups.forEach(interval => {
+      const rounded = Math.ceil(total / interval) * interval;
+      if (rounded > total) {
+        list.add(rounded);
+      }
+    });
+
+    // Sort ascending, remove duplicates, filter out values <= total, and select top 3
+    return Array.from(list)
+      .filter(val => val > total)
+      .sort((a, b) => a - b)
+      .slice(0, 3);
+  }, [total]);
 
   useEffect(() => {
     let interval: any;
@@ -424,10 +451,21 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
                       <div className="flex flex-col gap-4">
                         <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 flex-1">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest col-span-2 lg:col-span-1">Uang Cepat</p>
-                          <button onClick={() => handleQuickCash(total)} className="py-3 bg-red-50 text-red-700 rounded-xl font-bold text-xs sm:text-sm border border-red-100 hover:bg-red-100">Pas</button>
-                          <button onClick={() => handleQuickCash(20000)} className="py-3 bg-slate-50 text-slate-700 rounded-xl font-bold text-xs sm:text-sm border border-slate-200 hover:bg-slate-100">20k</button>
-                          <button onClick={() => handleQuickCash(50000)} className="py-3 bg-slate-50 text-slate-700 rounded-xl font-bold text-xs sm:text-sm border border-slate-200 hover:bg-slate-100">50k</button>
-                          <button onClick={() => handleQuickCash(100000)} className="py-3 bg-slate-50 text-slate-700 rounded-xl font-bold text-xs sm:text-sm border border-slate-200 hover:bg-slate-100">100k</button>
+                          <button 
+                            onClick={() => handleQuickCash(total)} 
+                            className="py-3 bg-red-50 text-red-700 rounded-xl font-bold text-xs sm:text-sm border border-red-100 hover:bg-red-100 transition-all active:scale-95"
+                          >
+                            Pas ({formatCurrency(total)})
+                          </button>
+                          {cashSuggestions.map((amount) => (
+                            <button 
+                              key={amount}
+                              onClick={() => handleQuickCash(amount)} 
+                              className="py-3 bg-slate-50 text-slate-700 rounded-xl font-bold text-xs sm:text-sm border border-slate-200 hover:bg-slate-100 transition-all active:scale-95"
+                            >
+                              {amount >= 1000 ? `${(amount / 1000).toLocaleString('id-ID')}k` : amount.toLocaleString('id-ID')} ({formatCurrency(amount)})
+                            </button>
+                          ))}
                         </div>
                         
                         <div className="p-4 sm:p-6 bg-green-50 rounded-3xl border border-green-100">

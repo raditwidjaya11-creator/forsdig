@@ -6,9 +6,6 @@ export interface UserProfile {
   email?: string;
   phone?: string;
   balance: number;
-  defaultMarkup: number;
-  minMarkup: number;
-  maxMarkup: number;
   subscriptionStatus: 'active' | 'expired' | 'suspended';
   packageType: 'FREE' | 'PRO' | 'RESELLER';
   expiredAt?: string | number;
@@ -37,37 +34,6 @@ export interface Subscription {
   createdAt: string | number;
 }
 
-export interface UserMarkup {
-  id: string;
-  userId: string;
-  productId?: string;
-  categoryId?: string;
-  categoryName?: string;
-  markup: number;
-  createdAt: string | number;
-}
-
-export interface ApiSettings {
-  provider: 'Digiflazz' | 'Tripay' | 'VipReseller' | 'iPaymu' | 'Custom';
-  apiKey: string;
-  apiId?: string;
-  username?: string;
-  secretKey?: string;
-  endpointUrl: string;
-  isActive: boolean;
-}
-
-export interface MarkupSettings {
-  type: 'flat' | 'percentage';
-  value: number;
-  categoryMarkups: {
-    [key: string]: {
-      type: 'flat' | 'percentage';
-      value: number;
-    };
-  };
-}
-
 export interface PromoBanner {
   id: string;
   imageUrl: string;
@@ -94,7 +60,6 @@ export interface StoreSettings {
   footerMessage: string;
   taxRate: number;
   printerServiceUuid?: string;
-  apiSettings?: ApiSettings[];
   displayConfig?: {
     welcomeText?: string;
     promoTexts?: string[];
@@ -218,46 +183,6 @@ export interface DebtReceivable {
   referenceId: string; // Transaction ID or PurchaseOrder ID
   timestamp: string | number;
   payments?: PaymentHistory[];
-}
-
-export type PPOBCategory = 'PLN' | 'Pulsa' | 'Paket Data' | 'PDAM' | 'BPJS' | 'E-Wallet' | 'Game' | 'TV';
-
-export interface PPOBService {
-  id: string;
-  category: string;
-  code: string; 
-  name: string;
-  provider: string;
-  basePrice: number;
-  adminMarkup: number;
-  markupPrice?: number; // legacy/calculated
-  adminFee?: number; // calculated
-  sellingPrice: number;
-  isActive: boolean;
-  description?: string;
-  updatedAt: string | number;
-}
-
-export interface PPOBTransaction {
-  id: string;
-  userId: string;
-  productId: string;
-  productCode?: string;
-  productName?: string;
-  customerNumber?: string;
-  amount?: number; // base price
-  markup?: number; // user markup
-  adminFee?: number;
-  total?: number; // selling price
-  sellingPrice: number;
-  profitAdmin: number;
-  profitUser: number;
-  status: 'pending' | 'success' | 'failed' | 'canceled';
-  reference?: string;
-  sn?: string;
-  details?: any;
-  timestamp?: number;
-  createdAt: string | number;
 }
 
 export interface BalanceMutation {

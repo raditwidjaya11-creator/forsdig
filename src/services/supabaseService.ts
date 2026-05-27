@@ -1,4 +1,4 @@
-import { supabase, DbTable, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, DbTable, isSupabaseConfigured, getCachedUserId, setCachedUserId } from '../lib/supabase';
 import { Product } from '../types';
 
 const isPlainObject = (val: any) => 
@@ -51,12 +51,30 @@ async function withTimeout<T>(promise: PromiseLike<T> | Promise<T>, timeoutMs: n
   }
 }
 
+// Safely get user ID using local cache to completely avoid lock contention in parallel fetches
+export async function getActiveUserId(): Promise<string | null> {
+  const cached = getCachedUserId();
+  if (cached) return cached;
+  
+  try {
+    console.log("[ForsDig POS] Cache miss. Fetching session from Supabaseauth...");
+    const sessionResponse = await withTimeout(supabase.auth.getSession());
+    const id = sessionResponse.data.session?.user?.id || null;
+    if (id) {
+      setCachedUserId(id);
+    }
+    return id;
+  } catch (err) {
+    console.error("[ForsDig POS] Error fetching active user session:", err);
+    return null;
+  }
+}
+
 export async function fetchData<T>(table: DbTable): Promise<T[]> {
   if (!isSupabaseConfigured) return [];
   
   try {
-    const sessionResponse = await withTimeout(supabase.auth.getSession());
-    const userId = sessionResponse.data.session?.user?.id;
+    const userId = await getActiveUserId();
     
     if (!userId) {
       console.warn(`[ForsDig POS] No active session for fetchData from ${table}`);
@@ -88,9 +106,7 @@ export async function fetchData<T>(table: DbTable): Promise<T[]> {
 export async function fetchLimitedProducts(): Promise<Partial<Product>[]> {
   if (!isSupabaseConfigured) return [];
   
-  const { data: { session } } = await supabase.auth.getSession();
-  const userId = session?.user?.id;
-  
+  const userId = await getActiveUserId();
   if (!userId) return [];
 
   const { data, error } = await supabase
@@ -111,8 +127,7 @@ export async function fetchLimitedProducts(): Promise<Partial<Product>[]> {
 export async function saveData<T>(table: DbTable, data: T | T[]) {
   if (!isSupabaseConfigured) return;
   
-  const { data: { session } } = await supabase.auth.getSession();
-  const userId = session?.user?.id;
+  const userId = await getActiveUserId();
   
   if (!userId) {
     console.error(`[ForsDig POS] Gagal menyimpan ke ${table}: User tidak login`);
@@ -143,8 +158,7 @@ export async function fetchProfile(id?: string) {
   if (!isSupabaseConfigured) return null;
   
   try {
-    const sessionResponse = await withTimeout(supabase.auth.getSession());
-    const userId = id || sessionResponse.data.session?.user?.id;
+    const userId = id || (await getActiveUserId());
     
     if (!userId) return null;
 
@@ -168,40 +182,10 @@ export async function fetchProfile(id?: string) {
   }
 }
 
-export async function fetchUserMarkups(userId?: string) {
-  if (!isSupabaseConfigured) return [];
-  
-  try {
-    const sessionResponse = await withTimeout(supabase.auth.getSession());
-    const id = userId || sessionResponse.data.session?.user?.id;
-    
-    if (!id) return [];
-
-    const response = await withTimeout(
-      supabase
-        .from('user_markups')
-        .select('*')
-        .eq('user_id', id)
-    );
-
-    if (response.error) {
-      console.error('[ForsDig POS] Error fetching user markups:', response.error);
-      return [];
-    }
-
-    return (response.data || []).map(item => snakeToCamel(item));
-  } catch (err) {
-    console.error('[ForsDig POS] fetchUserMarkups timeout or error:', err);
-    return [];
-  }
-}
-
 export async function deleteData(table: DbTable, id: string | number) {
   if (!isSupabaseConfigured) return;
   
-  const { data: { session } } = await supabase.auth.getSession();
-  const userId = session?.user?.id;
-  
+  const userId = await getActiveUserId();
   if (!userId) return;
 
   const { error } = await supabase

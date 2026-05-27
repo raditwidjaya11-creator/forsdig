@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { StoreSettings as StoreSettingsType } from '../types';
 import { Settings, Save, Store, MapPin, Phone, MessageSquare, Percent, Mail, Image as ImageIcon, X, Bluetooth as BluetoothIcon, QrCode, RefreshCcw, Cloud, Monitor } from 'lucide-react';
 import { motion } from 'motion/react';
-import { usePPOBStore } from '../services/ppobStore';
 
 interface StoreSettingsProps {
   settings: StoreSettingsType;

@@ -5,7 +5,7 @@ import {
   ActivityLog, Subscription, UserProfile, Staff, Reseller, Commission
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { fetchData, saveData, deleteData, snakeToCamel } from './supabaseService';
+import { fetchData, saveData, deleteData, snakeToCamel, getActiveUserId } from './supabaseService';
 import { generateUUID } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -72,12 +72,10 @@ export const usePOSStore = create<POSState>((set, get) => ({
     if (!isSupabaseConfigured) return;
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) return;
+      const userId = await getActiveUserId();
+      if (!userId) return;
 
       set({ isLoading: true });
-      
-      const userId = session.user.id;
 
       // Parallelize with individual error handling to ensure one table error doesn't break everything
       const fetchWithCatch = async <T>(table: any): Promise<T[]> => {

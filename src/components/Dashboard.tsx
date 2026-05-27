@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react';
+import React, { useState, useMemo, memo, useRef, useEffect } from 'react';
 import { Product, Category } from '../types';
 import { Search, Filter, Grid, List as ListIcon, ShoppingBag, Plus, Scan } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -62,6 +62,19 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Semua');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Hotkey to focus search with '/' slash key
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -86,6 +99,26 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
     }
   };
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchTerm.trim() !== '') {
+      // 1. Check dry matches
+      const term = searchTerm.toLowerCase().trim();
+      const exactMatch = products.find(p => p.isActive && (
+        p.name.toLowerCase() === term || (p.sku && p.sku.toLowerCase() === term)
+      ));
+      
+      if (exactMatch) {
+        onAddToCart(exactMatch);
+        setSearchTerm('');
+        e.preventDefault();
+      } else if (filteredProducts.length === 1) {
+        onAddToCart(filteredProducts[0]);
+        setSearchTerm('');
+        e.preventDefault();
+      }
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6 pb-24 md:pb-6">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
@@ -96,10 +129,12 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400 group-focus-within:text-red-600 transition-colors" />
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Cari produk atau scan..."
+                placeholder="Cari produk atau scan barcode... (Tekan [/] untuk cari)"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 className="block w-full pl-10 pr-4 py-3 sm:py-3.5 border border-slate-200 rounded-2xl bg-white text-xs sm:text-sm focus:ring-4 focus:ring-red-50 focus:border-red-500 focus:outline-none transition-all shadow-sm"
               />
             </div>

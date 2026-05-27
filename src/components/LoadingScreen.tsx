@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ShoppingBag, RefreshCcw } from 'lucide-react';
 
-const LoadingScreen = () => {
+const LoadingScreen = ({ message = "Memuat Sistem ForsDig..." }: { message?: string }) => {
   const [showRetry, setShowRetry] = useState(false);
 
   useEffect(() => {
@@ -35,7 +35,8 @@ const LoadingScreen = () => {
       </div>
       
       <div className="mt-8 text-center max-w-xs px-6">
-        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-2">Memuat Sistem ForsDig</h3>
+        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-1">Memuat Sistem ForsDig</h3>
+        <p className="text-xs text-blue-600 dark:text-blue-450 font-semibold mb-3 animate-pulse">{message}</p>
         
         {showRetry ? (
           <div className="space-y-4">

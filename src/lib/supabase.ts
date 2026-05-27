@@ -27,4 +27,16 @@ export const supabase = createClient(
   }
 );
 
-export type DbTable = 'products' | 'transactions' | 'suppliers' | 'customers' | 'purchase_orders' | 'debts' | 'ppob_transactions' | 'ppob_services' | 'store_settings' | 'qris' | 'outlets' | 'balance_mutations' | 'profiles' | 'categories' | 'vouchers' | 'staff' | 'resellers' | 'commissions' | 'user_markups' | 'subscriptions' | 'activity_logs';
+// Memory cache for active authenticated user ID to prevent concurrent local storage locking issues
+let cachedUserId: string | null = null;
+
+export const setCachedUserId = (id: string | null) => {
+  console.log(`[ForsDig POS] Supplying memory-cached userId: ${id}`);
+  cachedUserId = id;
+};
+
+export const getCachedUserId = (): string | null => {
+  return cachedUserId;
+};
+
+export type DbTable = 'products' | 'transactions' | 'suppliers' | 'customers' | 'purchase_orders' | 'debts' | 'store_settings' | 'qris' | 'outlets' | 'balance_mutations' | 'profiles' | 'categories' | 'vouchers' | 'staff' | 'resellers' | 'commissions' | 'subscriptions' | 'activity_logs';
