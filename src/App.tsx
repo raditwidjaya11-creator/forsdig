@@ -65,7 +65,7 @@ export default function App() {
     products, categories, transactions, paymentQrs, storeSettings, vouchers,
     suppliers, customers, purchaseOrders, debts,
     fetchInitialData, addTransaction, updateProduct, deleteProduct,
-    addProduct, addCategory, updateCategory, deleteCategory, syncEntity,
+    addProduct, addCategory, updateCategory, deleteCategory, syncEntity, deleteEntity,
     setCategories
   } = usePOSStore();
   
@@ -88,6 +88,26 @@ export default function App() {
     }
   }, [syncEntity, fetchInitialData]);
 
+  const handleUpdateSupplier = useCallback(async (s: any) => {
+    try {
+      await syncEntity('suppliers', s);
+      await fetchInitialData();
+      toast.success('Supplier berhasil diperbarui');
+    } catch (err) {
+      toast.error('Gagal memperbarui supplier');
+    }
+  }, [syncEntity, fetchInitialData]);
+
+  const handleDeleteSupplier = useCallback(async (id: string) => {
+    try {
+      await deleteEntity('suppliers', id);
+      await fetchInitialData();
+      toast.success('Supplier berhasil dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus supplier');
+    }
+  }, [deleteEntity, fetchInitialData]);
+
   const handleAddClient = useCallback(async (c: any) => {
     try {
       await syncEntity('customers', c);
@@ -97,6 +117,46 @@ export default function App() {
       toast.error('Gagal menambahkan pelanggan');
     }
   }, [syncEntity, fetchInitialData]);
+
+  const handleUpdateClient = useCallback(async (c: any) => {
+    try {
+      await syncEntity('customers', c);
+      await fetchInitialData();
+      toast.success('Pelanggan berhasil diperbarui');
+    } catch (err) {
+      toast.error('Gagal memperbarui pelanggan');
+    }
+  }, [syncEntity, fetchInitialData]);
+
+  const handleDeleteClient = useCallback(async (id: string) => {
+    try {
+      await deleteEntity('customers', id);
+      await fetchInitialData();
+      toast.success('Pelanggan berhasil dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus pelanggan');
+    }
+  }, [deleteEntity, fetchInitialData]);
+
+  const handleDeletePurchase = useCallback(async (id: string) => {
+    try {
+      await deleteEntity('purchase_orders', id);
+      await fetchInitialData();
+      toast.success('PO Pembelian berhasil dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus PO Pembelian');
+    }
+  }, [deleteEntity, fetchInitialData]);
+
+  const handleDeleteDebt = useCallback(async (id: string) => {
+    try {
+      await deleteEntity('debts', id);
+      await fetchInitialData();
+      toast.success('Data hutang/piutang berhasil dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus data hutang/piutang');
+    }
+  }, [deleteEntity, fetchInitialData]);
 
   const handleAddPurchase = useCallback(async (p: any) => {
     try {
@@ -808,10 +868,16 @@ export default function App() {
                     transactions={transactions}
                     storeSettings={storeSettings!}
                     onAddSupplier={handleAddSupplier}
+                    onUpdateSupplier={handleUpdateSupplier}
+                    onDeleteSupplier={handleDeleteSupplier}
                     onAddClient={handleAddClient}
+                    onUpdateClient={handleUpdateClient}
+                    onDeleteClient={handleDeleteClient}
                     onAddPurchase={handleAddPurchase}
+                    onDeletePurchase={handleDeletePurchase}
                     onReceivePurchase={handleReceivePurchase}
                     onUpdateDebt={handleUpdateDebt}
+                    onDeleteDebt={handleDeleteDebt}
                     onViewInvoice={handlePartnerInvoice}
                   />
                 )}

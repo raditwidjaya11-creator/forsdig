@@ -39,10 +39,16 @@ interface PartnerManagerProps {
   transactions: Transaction[];
   storeSettings: StoreSettings;
   onAddSupplier: (s: Supplier) => void;
+  onUpdateSupplier?: (s: Supplier) => void;
+  onDeleteSupplier?: (id: string) => void;
   onAddClient: (c: Client) => void;
+  onUpdateClient?: (c: Client) => void;
+  onDeleteClient?: (id: string) => void;
   onAddPurchase: (p: PurchaseOrder) => void;
+  onDeletePurchase?: (id: string) => void;
   onReceivePurchase: (p: PurchaseOrder) => void;
   onUpdateDebt: (d: DebtReceivable) => void;
+  onDeleteDebt?: (id: string) => void;
   onViewInvoice: (t: Transaction, customer?: { name: string; address?: string; phone?: string; email?: string; type?: string }) => void;
 }
 
@@ -54,15 +60,22 @@ export default function PartnerManager({
   products,
   transactions,
   onAddSupplier,
+  onUpdateSupplier,
+  onDeleteSupplier,
   onAddClient,
+  onUpdateClient,
+  onDeleteClient,
   onAddPurchase,
+  onDeletePurchase,
   onReceivePurchase,
   onUpdateDebt,
+  onDeleteDebt,
   onViewInvoice,
   storeSettings
 }: PartnerManagerProps) {
   const [activeSubTab, setActiveSubTab] = useState<'suppliers' | 'clients' | 'purchases' | 'debts'>('suppliers');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Form States
@@ -110,29 +123,50 @@ export default function PartnerManager({
     setSelectedProductId('');
     setSelectedQty('1');
     setSelectedPrice('0');
+    setEditingId(null);
   };
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const id = generateUUID();
 
     if (activeSubTab === 'suppliers') {
-      onAddSupplier({
-        id,
-        name: formData.name,
-        contactName: formData.contactName,
-        phone: formData.phone,
-        email: formData.email,
-        address: formData.address
-      });
+      if (editingId) {
+        onUpdateSupplier?.({
+          id: editingId,
+          name: formData.name,
+          contactName: formData.contactName,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address
+        });
+      } else {
+        onAddSupplier({
+          id: generateUUID(),
+          name: formData.name,
+          contactName: formData.contactName,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address
+        });
+      }
     } else if (activeSubTab === 'clients') {
-      onAddClient({
-        id,
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        address: formData.address
-      });
+      if (editingId) {
+        onUpdateClient?.({
+          id: editingId,
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address
+        });
+      } else {
+        onAddClient({
+          id: generateUUID(),
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address
+        });
+      }
     } else if (activeSubTab === 'purchases') {
       const total = formData.items.reduce((sum, item) => sum + (item.quantity * item.costPrice), 0);
       onAddPurchase({
@@ -148,6 +182,35 @@ export default function PartnerManager({
 
     setShowAddModal(false);
     resetForm();
+  };
+
+  const handleEditClick = (type: 'suppliers' | 'clients', item: any) => {
+    setEditingId(item.id);
+    setFormData({
+      name: item.name || '',
+      contactName: item.contactName || '',
+      phone: item.phone || '',
+      email: item.email || '',
+      address: item.address || '',
+      supplierId: '',
+      items: [],
+      paymentStatus: 'Lunas'
+    });
+    setShowAddModal(true);
+  };
+
+  const handleDeleteClick = (type: 'suppliers' | 'clients' | 'purchases' | 'debts', id: string, name?: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus ${type === 'suppliers' ? 'supplier' : type === 'clients' ? 'pelanggan' : type === 'purchases' ? 'PO' : 'hutang/piutang'} "${name || id}"?`)) {
+      if (type === 'suppliers') {
+        onDeleteSupplier?.(id);
+      } else if (type === 'clients') {
+        onDeleteClient?.(id);
+      } else if (type === 'purchases') {
+        onDeletePurchase?.(id);
+      } else if (type === 'debts') {
+        onDeleteDebt?.(id);
+      }
+    }
   };
 
   const removeItemFromPO = (index: number) => {
@@ -248,9 +311,19 @@ export default function PartnerManager({
                 <Search size={14} />
                 Detail
               </button>
-              <button className="flex-1 py-3 bg-white text-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-200 flex items-center justify-center gap-2">
+              <button 
+                onClick={() => handleEditClick('suppliers', s)}
+                className="flex-1 py-3 bg-white text-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-200 flex items-center justify-center gap-2"
+              >
                 <Edit2 size={14} />
                 Edit
+              </button>
+              <button 
+                onClick={() => handleDeleteClick('suppliers', s.id, s.name)}
+                className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all flex items-center justify-center"
+                title="Hapus Supplier"
+              >
+                <Trash2 size={14} />
               </button>
             </div>
           </motion.div>
@@ -318,6 +391,23 @@ export default function PartnerManager({
                 <MapPin size={14} className="text-slate-300" />
                 <span className="truncate">{c.address}</span>
               </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button 
+                onClick={() => handleEditClick('clients', c)}
+                className="flex-1 py-3 bg-white text-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-200 flex items-center justify-center gap-2"
+              >
+                <Edit2 size={14} />
+                Edit
+              </button>
+              <button 
+                onClick={() => handleDeleteClick('clients', c.id, c.name)}
+                className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all flex items-center justify-center"
+                title="Hapus Pelanggan"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           </motion.div>
         ))}
@@ -486,6 +576,14 @@ export default function PartnerManager({
                         >
                           <FileText size={18} />
                         </button>
+
+                        <button 
+                          onClick={() => handleDeleteClick('purchases', po.id, po.id)}
+                          className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                          title="Hapus PO"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -527,7 +625,7 @@ export default function PartnerManager({
                 <span className="text-base font-black text-red-600">{formatCurrency(po.total)}</span>
               </div>
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-2">
                 <button 
                   onClick={() => {
                     const supplier = suppliers.find(s => s.id === po.supplierId);
@@ -614,6 +712,13 @@ export default function PartnerManager({
                     <span className="text-[8px] font-black uppercase mt-1">Done</span>
                   </div>
                 )}
+                <button 
+                  onClick={() => handleDeleteClick('purchases', po.id, po.id)}
+                  className="flex flex-col items-center justify-center p-3 bg-red-50 rounded-2xl text-red-600"
+                >
+                  <Trash2 size={18} />
+                  <span className="text-[8px] font-black uppercase mt-1">Hapus</span>
+                </button>
               </div>
             </motion.div>
           );
@@ -821,6 +926,13 @@ export default function PartnerManager({
                               Bayar
                             </button>
                           )}
+                          <button 
+                            onClick={() => handleDeleteClick('debts', d.id, d.referenceId)}
+                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                            title="Hapus Data"
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1153,11 +1265,15 @@ export default function PartnerManager({
             >
               <div className="p-8 border-b border-slate-50 flex items-center justify-between">
                 <h3 className="text-2xl font-black uppercase tracking-tight">
-                  {activeSubTab === 'suppliers' ? 'Tambah Supplier' : 
-                   activeSubTab === 'clients' ? 'Tambah Client' : 
-                   'Buat Purchase Order'}
+                  {editingId ? (
+                    activeSubTab === 'suppliers' ? 'Edit Supplier' : 'Edit Client'
+                  ) : (
+                    activeSubTab === 'suppliers' ? 'Tambah Supplier' : 
+                    activeSubTab === 'clients' ? 'Tambah Client' : 
+                    'Buat Purchase Order'
+                  )}
                 </h3>
-                <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+                <button onClick={() => { setShowAddModal(false); resetForm(); }} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
                   <X />
                 </button>
               </div>
@@ -1393,7 +1509,7 @@ export default function PartnerManager({
                     type="submit"
                     className="w-full mt-4 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-2xl shadow-slate-200"
                   >
-                    Simpan Data
+                    {editingId ? 'Update Data' : 'Simpan Data'}
                   </button>
                 </form>
               </div>

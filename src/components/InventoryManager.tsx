@@ -8,6 +8,7 @@ import Papa from 'papaparse';
 import BarcodeScanner from './BarcodeScanner';
 import BarcodePrintModal from './BarcodePrintModal';
 import Barcode from 'react-barcode';
+import { toast } from 'sonner';
 
 const PRODUCT_UNITS = [
   'unit', 'pcs', 'kg', 'gram', 'liter', 'ml', 'dus', 'box', 'pack', 'lembar', 'ikat', 
@@ -153,6 +154,7 @@ export default function InventoryManager({
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
   const [customUnit, setCustomUnit] = useState('');
   const [isCustomUnit, setIsCustomUnit] = useState(false);
@@ -167,6 +169,7 @@ export default function InventoryManager({
     if (product) {
       setEditingProduct(product);
       setPreviewImage(product.image);
+      setImageUrlInput(product.image || '');
       if (PRODUCT_UNITS.includes(product.unit)) {
         setSelectedUnit(product.unit);
         setIsCustomUnit(false);
@@ -178,6 +181,7 @@ export default function InventoryManager({
     } else {
       setIsAdding(true);
       setPreviewImage(null);
+      setImageUrlInput('');
       setSelectedUnit('pcs');
       setIsCustomUnit(false);
     }
@@ -212,6 +216,7 @@ export default function InventoryManager({
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewImage(reader.result as string);
+        setImageUrlInput('');
       };
       reader.readAsDataURL(file);
     }
@@ -222,29 +227,78 @@ export default function InventoryManager({
     const formData = new FormData(e.target as HTMLFormElement);
     const finalUnit = isCustomUnit ? customUnit : selectedUnit;
 
+    const name = (formData.get('name') as string || '').trim();
+    if (!name) {
+      toast.error('Nama produk wajib diisi!', { icon: '❌' });
+      return;
+    }
+
+    const sku = (formData.get('sku') as string || '').trim();
+    if (sku) {
+      const isDuplicate = products.some(p => p.sku === sku && p.id !== (editingProduct?.id || ''));
+      if (isDuplicate) {
+        toast.error(`Barcode/SKU "${sku}" sudah terdaftar pada produk lain! Gunakan kode yang berbeda.`, { 
+          icon: '🚫',
+          duration: 4000
+        });
+        return;
+      }
+    }
+
+    const price = Number(formData.get('price'));
+    const costPrice = Number(formData.get('costPrice'));
+    if (isNaN(price) || price < 0) {
+      toast.error('Harga jual harus berupa angka valid dan tidak boleh kurang dari 0!', { icon: '❌' });
+      return;
+    }
+    if (isNaN(costPrice) || costPrice < 0) {
+      toast.error('Harga beli harus berupa angka valid dan tidak boleh kurang dari 0!', { icon: '❌' });
+      return;
+    }
+    if (costPrice > price) {
+      toast.warning(`Perhatian: Harga beli (${formatCurrency(costPrice)}) lebih tinggi dari harga jual (${formatCurrency(price)})! Anda akan rugi pada penjualan ini.`, {
+        duration: 5000,
+        icon: '⚠️'
+      });
+    }
+
+    const stock = Number(formData.get('stock')) || 0;
+    const minStock = Number(formData.get('minStock')) || 0;
+    if (isNaN(stock) || stock < 0) {
+      toast.error('Stok awal harus berupa angka valid!', { icon: '❌' });
+      return;
+    }
+    if (isNaN(minStock) || minStock < 0) {
+      toast.error('Batas minimal stok harus berupa angka valid!', { icon: '❌' });
+      return;
+    }
+
     const productData: Product = {
       id: editingProduct?.id || Date.now().toString(),
-      sku: formData.get('sku') as string,
-      name: formData.get('name') as string,
-      price: Number(formData.get('price')),
-      costPrice: Number(formData.get('costPrice')),
+      sku: sku || undefined,
+      name,
+      price,
+      costPrice,
       category: formData.get('category') as string,
-      image: previewImage || (formData.get('image') as string) || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop',
-      stock: Number(formData.get('stock')),
-      minStock: Number(formData.get('minStock')),
+      image: previewImage || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop',
+      stock,
+      minStock,
       unit: finalUnit,
-      description: formData.get('description') as string,
+      description: (formData.get('description') as string || '').trim(),
       isActive: formData.get('isActive') === 'on',
     };
 
     if (editingProduct) {
       onUpdate(productData);
+      toast.success(`Produk "${name}" berhasil diperbarui!`, { icon: '✨' });
     } else {
       onAdd(productData);
+      toast.success(`Produk "${name}" berhasil ditambahkan!`, { icon: '🎉' });
     }
     setEditingProduct(null);
     setIsAdding(false);
     setPreviewImage(null);
+    setImageUrlInput('');
     setSelectedUnit('');
     setCustomUnit('');
     setIsCustomUnit(false);
@@ -454,7 +508,23 @@ export default function InventoryManager({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider">Barcode / SKU</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider">Barcode / SKU</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const generatedSku = 'FD-' + Math.floor(100000 + Math.random() * 900000).toString();
+                        if (skuInputRef.current) {
+                          skuInputRef.current.value = generatedSku;
+                        }
+                        toast.success(`SKU berhasil dibuat secara otomatis: ${generatedSku}`, { icon: '✨' });
+                      }}
+                      className="text-[10px] font-black text-red-600 hover:text-red-700 uppercase tracking-wider transition-colors"
+                      title="Klik untuk membuat Barcode/SKU acak unik"
+                    >
+                      + Buat SKU Otomatis
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <input
                       name="sku"
@@ -613,7 +683,12 @@ export default function InventoryManager({
                       </div>
                       <input
                         name="image"
-                        defaultValue={editingProduct?.image}
+                        value={imageUrlInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setImageUrlInput(val);
+                          setPreviewImage(val || null);
+                        }}
                         placeholder="Atau URL gambar..."
                         className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 transition-all text-[10px] font-bold text-slate-500"
                       />
@@ -801,20 +876,36 @@ export default function InventoryManager({
                   />
                   <button
                     onClick={() => {
-                      if (!newCategoryName.trim()) return;
+                      const trimmedInput = newCategoryName.trim();
+                      if (!trimmedInput) return;
                       
                       if (editingCategory) {
+                        const oldName = editingCategory.name;
+                        if (oldName !== trimmedInput) {
+                          // Update any products using the old category name
+                          products.forEach(p => {
+                            if (p.category === oldName) {
+                              onUpdate({ ...p, category: trimmedInput });
+                            }
+                          });
+                        }
                         const updated = categories.map(c => 
-                          c.id === editingCategory.id ? { ...c, name: newCategoryName } : c
+                          c.id === editingCategory.id ? { ...c, name: trimmedInput } : c
                         );
                         onUpdateCategories(updated);
+                        toast.success(`Kategori "${oldName}" berhasil diubah menjadi "${trimmedInput}"!`, { icon: '✨' });
                         setEditingCategory(null);
                       } else {
+                        if (categories.some(c => c.name.toLowerCase() === trimmedInput.toLowerCase())) {
+                          toast.error(`Kategori "${trimmedInput}" sudah ada!`, { icon: '🚫' });
+                          return;
+                        }
                         const newCategory: Category = {
                           id: generateUUID(),
-                          name: newCategoryName
+                          name: trimmedInput
                         };
                         onUpdateCategories([...categories, newCategory]);
+                        toast.success(`Kategori "${trimmedInput}" berhasil ditambahkan!`, { icon: '🎉' });
                       }
                       setNewCategoryName('');
                     }}
