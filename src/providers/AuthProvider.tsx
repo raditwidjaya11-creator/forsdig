@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const { userProfile: user, fetchUserProfile, fetchMutations } = useUserStore();
-  const { fetchInitialData } = usePOSStore();
+  const { fetchInitialData, resetStore } = usePOSStore();
 
   const isInitializedRef = useRef(false);
   const lastProcessedUserRef = useRef<string | null>(null);
@@ -306,6 +306,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       lastProcessedUserRef.current = null;
       setCachedUserId(null);
+      resetStore();
+      localStorage.removeItem('pos_local_user_profile');
 
       if (!isFirebaseConfigured) {
         localStorage.removeItem('pos_demo_logged_in');

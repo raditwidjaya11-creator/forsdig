@@ -4,7 +4,7 @@ import {
   PurchaseOrder, DebtReceivable, PaymentQR, StoreSettings, Voucher,
   ActivityLog, Subscription, UserProfile, Staff, Reseller, Commission
 } from '../types';
-import { isFirebaseConfigured } from '../lib/firebase';
+import { isFirebaseConfigured, auth, getCachedUserId } from '../lib/firebase';
 import { fetchData, saveData, deleteData, snakeToCamel, getActiveUserId } from './firebaseService';
 import { generateUUID } from '../lib/utils';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ interface POSState {
   
   // Actions
   fetchInitialData: (forceCloudAwait?: boolean) => Promise<void>;
+  resetStore: () => void;
   
   // Products
   setProducts: (products: Product[]) => void;
@@ -50,9 +51,25 @@ interface POSState {
   deleteEntity: (table: string, id: string) => Promise<void>;
 }
 
+const getLocalSuffix = (): string => {
+  const cached = getCachedUserId();
+  if (cached) return `_${cached}`;
+  const currentUid = auth.currentUser?.uid;
+  if (currentUid) return `_${currentUid}`;
+  try {
+    const savedProfileStr = localStorage.getItem('pos_local_user_profile');
+    if (savedProfileStr) {
+      const parsed = JSON.parse(savedProfileStr);
+      if (parsed && parsed.id) return `_${parsed.id}`;
+    }
+  } catch (e) {}
+  return '';
+};
+
 const loadLocal = <T>(table: string, fallback: T[] = []): T[] => {
   try {
-    const saved = localStorage.getItem(`pos_local_${table}`);
+    const suffix = getLocalSuffix();
+    const saved = localStorage.getItem(`pos_local_${table}${suffix}`);
     return saved ? JSON.parse(saved) : fallback;
   } catch (e) {
     return fallback;
@@ -61,7 +78,8 @@ const loadLocal = <T>(table: string, fallback: T[] = []): T[] => {
 
 const saveLocal = (table: string, data: any) => {
   try {
-    localStorage.setItem(`pos_local_${table}`, JSON.stringify(data));
+    const suffix = getLocalSuffix();
+    localStorage.setItem(`pos_local_${table}${suffix}`, JSON.stringify(data));
   } catch (e) {
     console.warn(`[ForsDig POS] Failed to backup ${table} to localStorage`, e);
   }
@@ -84,6 +102,27 @@ export const usePOSStore = create<POSState>((set, get) => ({
   resellers: [],
   commissions: [],
   isLoading: false,
+
+  resetStore: () => {
+    set({
+      products: [],
+      categories: [],
+      transactions: [],
+      customers: [],
+      suppliers: [],
+      purchaseOrders: [],
+      debts: [],
+      paymentQrs: [],
+      storeSettings: null,
+      vouchers: [],
+      activityLogs: [],
+      subscriptions: [],
+      staff: [],
+      resellers: [],
+      commissions: [],
+      isLoading: false
+    });
+  },
 
   fetchInitialData: async (forceCloudAwait = false) => {
     // 1. Instantly load loaded local components from localStorage so that POS screen is responsive and ready in 1-2 milliseconds!

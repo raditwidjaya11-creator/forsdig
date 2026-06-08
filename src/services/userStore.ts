@@ -44,7 +44,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
 
     // 1. Check local cache first for instant, near-zero loading experience on page load!
-    const cachedProfileRaw = localStorage.getItem('pos_local_user_profile');
+    const cachedProfileRaw = localStorage.getItem(`pos_local_profile_${userId}`) || localStorage.getItem('pos_local_user_profile');
     if (cachedProfileRaw) {
       try {
         const cachedProfile = JSON.parse(cachedProfileRaw);
@@ -74,6 +74,7 @@ export const useUserStore = create<UserState>((set, get) => ({
                   };
                   set({ userProfile: freshProfile });
                   localStorage.setItem('pos_local_user_profile', JSON.stringify(freshProfile));
+                  localStorage.setItem(`pos_local_profile_${userId}`, JSON.stringify(freshProfile));
                 }
               } catch (bgErr) {
                 console.warn("[UserStore Background] Silent profile refresh failed:", bgErr);
@@ -103,6 +104,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       };
       set({ userProfile: demoProfile });
       localStorage.setItem('pos_local_user_profile', JSON.stringify(demoProfile));
+      localStorage.setItem(`pos_local_profile_${userId}`, JSON.stringify(demoProfile));
       return true;
     }
 
@@ -150,6 +152,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
         set({ userProfile: fallbackProfile });
         localStorage.setItem('pos_local_user_profile', JSON.stringify(fallbackProfile));
+        localStorage.setItem(`pos_local_profile_${userId}`, JSON.stringify(fallbackProfile));
         return true;
       }
 
@@ -170,6 +173,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       set({ userProfile: loadedProfile });
       localStorage.setItem('pos_local_user_profile', JSON.stringify(loadedProfile));
+      localStorage.setItem(`pos_local_profile_${userId}`, JSON.stringify(loadedProfile));
       return true;
     } catch (err: any) {
       console.error("[UserStore] fetchUserProfile Failure:", err.message);
@@ -190,6 +194,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       };
       set({ userProfile: localFallbackProfile });
       localStorage.setItem('pos_local_user_profile', JSON.stringify(localFallbackProfile));
+      localStorage.setItem(`pos_local_profile_${userId}`, JSON.stringify(localFallbackProfile));
       return true;
     }
   },
@@ -268,6 +273,8 @@ export const useUserStore = create<UserState>((set, get) => ({
     if (!userProfile) return;
     const updated = { ...userProfile, ...profile };
     set({ userProfile: updated });
+    localStorage.setItem('pos_local_user_profile', JSON.stringify(updated));
+    localStorage.setItem(`pos_local_profile_${updated.id}`, JSON.stringify(updated));
     try {
       await saveData('profiles', updated);
     } catch (err) {
