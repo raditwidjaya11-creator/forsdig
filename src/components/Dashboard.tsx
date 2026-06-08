@@ -115,6 +115,7 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Semua');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isLowStockExpanded, setIsLowStockExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const hasShownToast = useRef(false);
 
@@ -230,50 +231,200 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
           </div>
         </div>
 
-        {/* Low Stock Warning Banner */}
+        {/* Low Stock Warning Banner & Interactive Widget */}
         {lowStockProducts.length > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            id="low-stock-banner"
-            className="bg-amber-50 dark:bg-amber-950/20 border border-amber-250 dark:border-amber-900/50 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm"
+            id="low-stock-widget"
+            className="bg-white border-2 border-amber-300 rounded-3xl p-4 md:p-5 flex flex-col gap-4 shadow-xl shadow-amber-500/5 overflow-hidden relative"
           >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-xl relative shrink-0">
-                <AlertTriangle size={20} className="relative z-10 animate-bounce" />
-                <span className="absolute inset-0 bg-amber-400 rounded-xl filter blur-sm opacity-30 animate-pulse"></span>
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 font-sans tracking-tight">
-                  Peringatan: {lowStockProducts.length} Produk Menyentuh Batas Stok Minimum!
-                </h4>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                  Persediaan hampir habis. Pastikan untuk segera memesan ulang barang ke supplier agar operasional tidak terganggu.
-                </p>
-              </div>
-            </div>
+            {/* Top Glow Accent */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-550 to-amber-500" />
             
-            <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1.5 md:pb-0 scrollbar-hide py-1 shrink-0">
-              {lowStockProducts.slice(0, 4).map(p => (
-                <div 
-                  key={p.id}
-                  onClick={() => {
-                    setSearchTerm(p.name);
-                    searchInputRef.current?.focus();
-                  }}
-                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-white dark:bg-slate-900 border border-amber-200 hover:border-amber-400 dark:border-amber-800 hover:shadow-sm py-1.5 px-3 rounded-xl text-amber-800 dark:text-amber-300 cursor-pointer transition-all"
-                  title="Klik untuk menyaring produk"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 block"></span>
-                  {p.name} ({p.stock} {p.unit || 'pcs'})
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl shrink-0 border border-amber-100 flex items-center justify-center">
+                  <AlertTriangle size={24} className="animate-pulse" />
                 </div>
-              ))}
-              {lowStockProducts.length > 4 && (
-                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100/50 hover:bg-amber-100/80 dark:bg-amber-950/30 py-1.5 px-3 rounded-xl align-middle self-center">
-                  +{lowStockProducts.length - 4} Lainnya
-                </span>
-              )}
+                <div>
+                  <h4 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight flex flex-wrap items-center gap-2">
+                    Sistem Kontrol Stok Kritis 
+                    <span className="bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full text-xs font-black border border-amber-200 animate-pulse">
+                      {lowStockProducts.length} Produk
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Terdapat beberapa produk yang menyentuh atau berada di bawah batas stok minimum (<code className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded">minStock</code>). Segera isi ulang untuk mencegah kehabisan barang.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 self-start md:self-auto min-w-fit">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const draftText = `Daftar Produk Stok Kritis / Re-order (FORSDIG POS):\n\n` +
+                      lowStockProducts.map((p, idx) => `${idx + 1}. ${p.name} (SKU: ${p.sku || '-'}) - Sisa Stok: ${p.stock} ${p.unit || 'pcs'} (Batas Min: ${p.minStock || 0})`).join('\n') +
+                      `\n\nMohon untuk memproses pemesanan ulang produk-produk di atas secepatnya. Terima kasih.`;
+                    
+                    try {
+                      navigator.clipboard.writeText(draftText);
+                      toast.success("Draft re-order berhasil disalin!", {
+                        description: "Kirim daftar belanja ini ke distributor atau supplier Anda.",
+                        id: "copy-draft-success"
+                      });
+                    } catch (err) {
+                      toast.error("Gagal menyalin draft otomatis.");
+                    }
+                  }}
+                  className="px-3 py-2 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded-xl hover:bg-slate-200 transition-all flex items-center gap-1.5 active:scale-95"
+                  title="Salin daftar belanja re-order ke clipboard"
+                >
+                  <span className="text-xs">📋</span> Salin Draft Re-order
+                </button>
+                
+                <button
+                  onClick={() => setIsLowStockExpanded(!isLowStockExpanded)}
+                  className={`px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 shadow-sm border ${
+                    isLowStockExpanded
+                      ? 'bg-amber-600 text-white border-amber-600 hover:bg-amber-700'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  {isLowStockExpanded ? 'Tutup Detail' : 'Buka Detail'}
+                  <span className="text-[10px]">{isLowStockExpanded ? '▲' : '▼'}</span>
+                </button>
+              </div>
             </div>
+
+            {/* Quick Chips space visible when collapsed */}
+            {!isLowStockExpanded && (
+              <div className="flex gap-2 w-full overflow-x-auto pb-1 scrollbar-hide py-1 border-t border-slate-100 pt-3 shrink-0">
+                {lowStockProducts.slice(0, 5).map(p => (
+                  <div 
+                    key={p.id}
+                    onClick={() => {
+                      setSearchTerm(p.name);
+                      searchInputRef.current?.focus();
+                      toast.info(`Mencari produk "${p.name}"`);
+                    }}
+                    className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider bg-slate-50 border border-amber-200 hover:border-amber-400 hover:shadow-xs py-1.5 px-3 rounded-xl text-amber-800 cursor-pointer transition-all shrink-0"
+                    title="Klik untuk menyaring produk ini di kasir"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-600 block animate-ping"></span>
+                    <span>{p.name}</span>
+                    <span className="opacity-30">|</span>
+                    <span className="font-extrabold text-red-600">{p.stock}</span>
+                    <span className="text-slate-400 font-normal">/ {p.minStock} {p.unit}</span>
+                  </div>
+                ))}
+                {lowStockProducts.length > 5 && (
+                  <button 
+                    onClick={() => setIsLowStockExpanded(true)}
+                    className="text-[10px] font-black text-amber-700 hover:text-amber-800 uppercase tracking-widest bg-amber-50 py-1.5 px-3 rounded-xl self-center whitespace-nowrap"
+                  >
+                    +{lowStockProducts.length - 5} Lainnya
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Slide open view detailing each low-stock item */}
+            {isLowStockExpanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="border-t border-slate-150 pt-4 flex flex-col gap-4"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {lowStockProducts.map(p => {
+                    const isOutOfStock = p.stock <= 0;
+                    const fillPercent = isOutOfStock ? 0 : Math.min(100, Math.round((p.stock / (p.minStock || 1)) * 100));
+                    
+                    return (
+                      <div 
+                        key={p.id}
+                        className={`p-3 rounded-2xl border flex flex-col justify-between gap-3 transition-colors ${
+                          isOutOfStock 
+                            ? 'bg-red-50/50 border-red-200' 
+                            : 'bg-amber-50/30 border-amber-200'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 bg-white flex-shrink-0">
+                            <img 
+                              src={p.image} 
+                              alt={p.name} 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="font-extrabold text-xs text-slate-800 truncate uppercase" title={p.name}>
+                              {p.name}
+                            </h5>
+                            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">
+                              Sisa Stok: <strong className={isOutOfStock ? 'text-red-650 text-red-600' : 'text-slate-700'}>{p.stock}</strong> / {p.minStock} {p.unit}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Stock Progress Bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[9px] font-black tracking-wider uppercase">
+                            <span className={isOutOfStock ? 'text-red-600 font-extrabold' : 'text-amber-700'}>
+                              {isOutOfStock ? 'STOK KOSONG!' : 'STOK KRITIS'}
+                            </span>
+                            <span className="text-slate-400 font-bold">{fillPercent}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                isOutOfStock ? 'bg-red-600' : 'bg-amber-500'
+                              }`}
+                              style={{ width: `${fillPercent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-1.5 border-t border-slate-100 pt-2.5 mt-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              setSearchTerm(p.name);
+                              searchInputRef.current?.focus();
+                              toast.success(`Filter produk di POS: ${p.name}`);
+                            }}
+                            className="flex-1 py-1.5 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-700 hover:text-red-600 hover:bg-slate-50 transition-all text-center"
+                          >
+                            Cari di POS
+                          </button>
+                          
+                          <a
+                            href={`https://wa.me/?text=${encodeURIComponent(`Halo Supplier,\nKami membutuhkan restok dari produk berikut secepatnya:\n\nProduk: ${p.name}\nSKU: ${p.sku || '-'}\nKategori: ${p.category}\nSisa Stok Saat Ini: ${p.stock} ${p.unit}\n\nMohon mengirimkan surat penawaran dan estimasi pengiriman. Terima kasih.`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider text-center flex items-center justify-center transition-all active:scale-95 shrink-0"
+                            title="Hubungi Supplier via WhatsApp"
+                          >
+                            WA
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Protective guidance notification to keep it architecturally transparent & informative */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex gap-2.5 items-start mt-1">
+                  <span className="text-sm">🛡️</span>
+                  <p className="text-[10px] sm:text-xs text-slate-500 leading-relaxed font-semibold">
+                    <strong className="text-slate-700 block mb-0.5">Mencegah Transaksi Overselling & Selisih Kas:</strong>
+                    Sistem secara otomatis memberikan tanda peringatan oranye ke produk yang mendekati ambang batas minimum. Apabila stok menyentuh angka 0 (nol), transaksi di kasir POS akan ter-block sepenuhnya dan tidak dapat diklaim masuk ke keranjang belanja demi perlindungan akurasi data finansial Anda.
+                  </p>
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
 

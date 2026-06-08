@@ -196,7 +196,7 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
               CSV
             </button>
             <button 
-              onClick={() => exportTransactionsToPDF(filteredTransactions, storeSettings)}
+              onClick={() => exportTransactionsToPDF(filteredTransactions, storeSettings, period)}
               disabled={filteredTransactions.length === 0}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all text-sm shadow-xl shadow-red-100 disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none"
             >

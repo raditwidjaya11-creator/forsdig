@@ -142,50 +142,207 @@ export function exportTransactionsToCSV(transactions: Transaction[]) {
   document.body.removeChild(link);
 }
 
-export function exportTransactionsToPDF(transactions: Transaction[], settings: StoreSettings) {
+export function exportTransactionsToPDF(transactions: Transaction[], settings: StoreSettings, filterPeriod?: 'daily' | 'weekly' | 'monthly') {
   const doc = new jsPDF();
   
-  // Header
-  doc.setFontSize(20);
-  doc.text(settings.name, 14, 22);
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  doc.text(settings.address, 14, 28);
-  doc.text(`Telp: ${settings.phone}`, 14, 33);
+  // 1. Calculations
+  const totalSales = transactions.reduce((sum, tx) => sum + tx.total, 0);
+  const totalTax = transactions.reduce((sum, tx) => sum + (tx.tax || 0), 0);
+  const totalDiscount = transactions.reduce((sum, tx) => sum + (tx.discount || 0), 0);
   
-  doc.setFontSize(16);
-  doc.setTextColor(0);
-  doc.text('LAPORAN TRANSAKSI', 14, 45);
-  doc.setFontSize(10);
-  doc.text(`Dicetak pada: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 50);
+  const totalCost = transactions.reduce((acc, t) => {
+    return acc + t.items.reduce((itemAcc, item) => itemAcc + ((item.costPrice || 0) * item.quantity), 0);
+  }, 0);
+  
+  const grossProfit = totalSales - totalCost;
+  const netProfit = grossProfit - totalTax;
+  const transactionCount = transactions.length;
+  
+  // Payment methods breakdown
+  const paymentSummary: Record<string, { count: number; volume: number }> = {};
+  transactions.forEach(tx => {
+    const k = tx.paymentMethod || 'Lainnya';
+    if (!paymentSummary[k]) {
+      paymentSummary[k] = { count: 0, volume: 0 };
+    }
+    paymentSummary[k].count++;
+    paymentSummary[k].volume += tx.total;
+  });
 
-  const tableColumn = ["ID", "Tanggal", "Metode", "Subtotal", "Pajak", "Total"];
-  const tableRows = transactions.map(tx => [
-    tx.id.substring(0, 8),
-    format(new Date(tx.timestamp), 'dd/MM/yy HH:mm'),
-    tx.paymentMethod,
-    formatCurrency(tx.subtotal),
-    formatCurrency(tx.tax),
-    formatCurrency(tx.total)
-  ]);
+  // Header Logo/Name
+  doc.setFontSize(22);
+  doc.setTextColor(220, 38, 38); // Red-600
+  doc.setFont('helvetica', 'bold');
+  doc.text(settings.name || 'FORSDIG POS', 14, 20);
+  
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.setFont('helvetica', 'normal');
+  doc.text(settings.address || 'Kawasan Bisnis Digital, Jakarta', 14, 26);
+  doc.text(`Telp: ${settings.phone || '-'} | Email: ${settings.email || '-'}`, 14, 31);
+  
+  // Line separator
+  doc.setDrawColor(220, 38, 38);
+  doc.setLineWidth(0.8);
+  doc.line(14, 35, 196, 35);
+  
+  // Title section
+  doc.setFontSize(14);
+  doc.setTextColor(30, 41, 59); // Slate-800
+  doc.setFont('helvetica', 'bold');
+  const periodTitle = filterPeriod === 'daily' ? 'HARIAN' : filterPeriod === 'weekly' ? 'MINGGUAN' : filterPeriod === 'monthly' ? 'BULANAN' : 'SISTEM';
+  doc.text(`LAPORAN KEUANGAN & PENJUALAN ${periodTitle}`, 14, 45);
+  
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text(`Kategori: Laporan Keuangan POS`, 14, 51);
+  doc.text(`Waktu Cetak: ${format(new Date(), 'dd MMMM yyyy HH:mm')}`, 140, 45);
+  doc.text(`Total Transaksi: ${transactionCount} Nota`, 140, 51);
 
+  // EXECUTIVE SUMMARY TABLE
+  const summaryColumns = ["Metrik Keuangan", "Nilai Rupiah", "Keterangan Ringkas"];
+  const summaryRows = [
+    ["Total Omset Penjualan (Sales)", formatCurrency(totalSales), "Pendapatan kotor sebelum potongan & PPN"],
+    ["Total Harga Pokok Penjualan (HPP)", formatCurrency(totalCost), "Biaya modal total dari produk yang terjual"],
+    ["Laba Kotor (Gross Profit)", formatCurrency(grossProfit), "Keuntungan kotor (Omset - HPP)"],
+    ["Pajak Penjualan Terkumpul (PPN)", formatCurrency(totalTax), "Total PPN yang ditarik dari transaksi"],
+    ["Potongan Harga / Diskon Promo", formatCurrency(totalDiscount), "Total diskon voucher dan potongan manual"],
+    ["Laba Bersih Usaha (Net Profit)", formatCurrency(netProfit), "Laba riil bersih usaha setelah dikurangi pajak"],
+    ["Nilai Rerata Transaksi (AOV)", formatCurrency(transactionCount > 0 ? totalSales / transactionCount : 0), "Rata-rata pengeluaran pelanggan per transaksi"]
+  ];
+  
   autoTable(doc, {
-    startY: 55,
+    startY: 57,
+    head: [summaryColumns],
+    body: summaryRows,
+    theme: 'grid',
+    headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' }, // slate-700
+    styles: { fontSize: 8.5, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 70, fontStyle: 'bold' },
+      1: { cellWidth: 45, fontStyle: 'bold', halign: 'right', textColor: [30, 41, 59] },
+      2: { cellWidth: 67, textColor: [100, 100, 100] }
+    }
+  });
+
+  // PAYMENT METHOD SUMMARY TABLE
+  const paymentY = (doc as any).lastAutoTable.finalY + 8;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text('RINGKASAN METODE PEMBAYARAN', 14, paymentY);
+  
+  const pMethodHeaders = ["Metode Pembayaran", "Jumlah Nota", "Total Penerimaan"];
+  const pMethodRows = Object.entries(paymentSummary).map(([method, data]) => [
+    method,
+    `${data.count} Transaksi`,
+    formatCurrency(data.volume)
+  ]);
+  
+  autoTable(doc, {
+    startY: paymentY + 3,
+    head: [pMethodHeaders],
+    body: pMethodRows,
+    theme: 'grid',
+    headStyles: { fillColor: [100, 116, 139], textColor: [255, 255, 255], fontStyle: 'bold' }, // slate-500
+    styles: { fontSize: 8, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 70, fontStyle: 'bold' },
+      1: { cellWidth: 40, halign: 'center' },
+      2: { cellWidth: 72, fontStyle: 'bold', halign: 'right' }
+    }
+  });
+
+  // TRANSACTION DETAIL TABLE
+  const txListY = (doc as any).lastAutoTable.finalY + 8;
+  let listStartY = txListY + 3;
+  if (txListY > 210) {
+    doc.addPage();
+    listStartY = 20;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('DAFTAR TRANSAKSI RINCI', 14, listStartY - 5);
+  } else {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('DAFTAR TRANSAKSI RINCI', 14, txListY);
+  }
+  
+  const tableColumn = ["No", "ID Nota", "Hari / Waktu", "Metode", "Daftar Item Belanja", "Pajak", "Diskon", "Total Bayar"];
+  const tableRows = transactions.map((tx, idx) => {
+    const itemsBrief = tx.items.map(i => `${i.name} (x${i.quantity})`).join('\n');
+    return [
+      String(idx + 1),
+      `#${tx.id.substring(0, 8).toUpperCase()}`,
+      format(new Date(tx.timestamp), 'dd/MM/yyyy HH:mm'),
+      tx.paymentMethod,
+      itemsBrief,
+      formatCurrency(tx.tax || 0),
+      tx.discount ? `-${formatCurrency(tx.discount)}` : '-',
+      formatCurrency(tx.total)
+    ];
+  });
+  
+  autoTable(doc, {
+    startY: listStartY,
     head: [tableColumn],
     body: tableRows,
     theme: 'striped',
-    headStyles: { fillColor: [220, 38, 38] }, // tailwind red-600
-    styles: { fontSize: 8 }
+    headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold' }, // red-600
+    styles: { fontSize: 7, cellPadding: 3, valign: 'middle' },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 26 },
+      2: { cellWidth: 26 },
+      3: { cellWidth: 20 },
+      4: { cellWidth: 46 },
+      5: { cellWidth: 16, halign: 'right' },
+      6: { cellWidth: 16, halign: 'right' },
+      7: { cellWidth: 22, fontStyle: 'bold', halign: 'right' }
+    },
+    didDrawPage: (data) => {
+      // Footer with Page Number
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(150);
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      doc.setDrawColor(240, 240, 240);
+      doc.line(14, 282, 196, 282);
+      doc.text(`ForsDig Smart POS - Laporan Audit Penjualan Resmi`, 14, 288);
+      doc.text(`Halaman ${data.pageNumber} / ${pageCount}`, 170, 288);
+    }
   });
 
-  const finalY = (doc as any).lastAutoTable.finalY + 10;
-  const totalRevenue = transactions.reduce((sum, tx) => sum + tx.total, 0);
+  // SIGNATURE SECTION
+  const finalSignatureY = (doc as any).lastAutoTable.finalY + 12;
+  let sigY = finalSignatureY;
+  if (finalSignatureY > 215) {
+    doc.addPage();
+    sigY = 25;
+  }
   
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`TOTAL PENDAPATAN: ${formatCurrency(totalRevenue)}`, 14, finalY);
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.5);
+  doc.line(14, sigY, 196, sigY);
+  
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(50);
+  doc.text('Dibuat oleh (Staf Kasir/Admin):', 14, sigY + 8);
+  doc.text('Disetujui oleh (Pemilik Toko/Manajer):', 130, sigY + 8);
+  
+  doc.text('____________________________', 14, sigY + 30);
+  doc.text('Nama:', 14, sigY + 35);
+  doc.text(`Tanggal: ${format(new Date(), 'dd/MM/yyyy')}`, 14, sigY + 40);
+  
+  doc.text('____________________________', 130, sigY + 30);
+  doc.text('Nama:', 130, sigY + 35);
+  doc.text(`Tanggal: ${format(new Date(), 'dd/MM/yyyy')}`, 130, sigY + 40);
 
-  doc.save(`Laporan_Transaksi_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+  doc.save(`Laporan_Keuangan_ForsDig_${periodTitle}_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
 }
 
 
