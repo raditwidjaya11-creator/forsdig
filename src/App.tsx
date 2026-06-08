@@ -39,10 +39,11 @@ import {
   X,
   Truck,
   Monitor,
-  Clock
+  Clock,
+  Menu
 } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
-import { generateUUID } from './lib/utils';
+import { generateUUID, formatCurrency } from './lib/utils';
 import LoadingScreen from './components/LoadingScreen';
 
 import { usePOSStore } from './services/posStore';
@@ -237,6 +238,8 @@ export default function App() {
   const [selectedClientIdForCart, setSelectedClientIdForCart] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showMobileCart, setShowMobileCart] = useState(false);
+  const [showLainnyaMenu, setShowLainnyaMenu] = useState(false);
   
   // Use our centralized authentication provider state and operations
   const { authState, isSyncing: isAuthSyncing, logout } = useAuth();
@@ -617,7 +620,7 @@ export default function App() {
       <Toaster position="top-right" richColors />
 
       {/* BILAH SAMPING (SIDEBAR) */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col z-20 shrink-0`}>
+      <aside className={`hidden md:flex ${isSidebarOpen ? 'w-64' : 'w-20'} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col z-20 shrink-0`}>
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           {isSidebarOpen ? (
             <span className="font-bold text-lg tracking-wider text-blue-600 dark:text-blue-400">ForsDig POS</span>
@@ -678,8 +681,106 @@ export default function App() {
 
       {/* KONTEN UTAMA APLIKASI */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* BILAH ATAS (HEADER) */}
-        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 z-10 shrink-0">
+        {/* MOBILE HEADER - "LIVIN' MERCHANT" STYLED BANNER ACCENT */}
+        <div className="md:hidden bg-gradient-to-r from-red-900 via-rose-950 to-slate-950 text-white px-4 pt-4 pb-4 rounded-b-[2rem] shadow-md relative overflow-hidden shrink-0 z-10 border-b border-red-800/30">
+          {/* Subtle decorative gold line curves mimicking premier banking aesthetic */}
+          <div className="absolute right-[-24px] top-[-24px] w-36 h-36 rounded-full border-[10px] border-amber-500/10 pointer-events-none" />
+          <div className="absolute right-[12%] bottom-[-45px] w-28 h-28 rounded-full bg-red-500/10 blur-lg pointer-events-none" />
+          
+          <div className="flex justify-between items-center relative z-10 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-amber-500 flex items-center justify-center font-black text-slate-950 shadow-md border-2 border-white/20">
+                {storeSettings?.name?.charAt(0).toUpperCase() || 'M'}
+              </div>
+              <div className="overflow-hidden max-w-[170px]">
+                <h4 className="text-white font-extrabold text-xs tracking-tight uppercase leading-none truncate">
+                  {storeSettings?.name || 'FORSDIG POS'}
+                </h4>
+                <div className="flex items-center gap-1 mt-1 leading-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                  <p className="text-[9px] text-slate-350 font-bold uppercase tracking-wider leading-none">{user?.username || 'KASIR BERTUGAS'}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {activeTab === 'kasir' && (
+                <div className="flex bg-white/10 p-0.5 rounded-lg text-[10px]">
+                  <button 
+                    onClick={() => setPosSubTab('produk')}
+                    className={`px-2 py-1 rounded-md font-bold transition-all ${posSubTab === 'produk' ? 'bg-amber-500 text-slate-950' : 'text-slate-300'}`}
+                  >
+                    Daftar
+                  </button>
+                  <button 
+                    onClick={() => setPosSubTab('riwayat')}
+                    className={`px-2 py-1 rounded-md font-bold transition-all ${posSubTab === 'riwayat' ? 'bg-amber-500 text-slate-950' : 'text-slate-300'}`}
+                  >
+                    POS
+                  </button>
+                </div>
+              )}
+
+              <button 
+                onClick={handleSyncData}
+                disabled={isSyncing}
+                className="p-2 bg-white/10 hover:bg-white/25 rounded-lg transition-all relative text-white"
+                title="Sinkronisasi Data"
+              >
+                <RefreshCcw size={14} className={isSyncing ? 'animate-spin' : ''} />
+              </button>
+              
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="p-2 bg-white/10 hover:bg-white/25 rounded-lg transition-all relative text-white"
+              >
+                <Bell className="h-4 w-4" />
+                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-red-500 animate-ping" />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Info Bar - Active Shifts Info resembling Livin' Account Cash Balance card */}
+          {(() => {
+            const activeShift = shifts?.find(s => s.status === 'active');
+            return (
+              <div className="bg-white/5 backdrop-blur-md rounded-xl p-3 border border-white/10 flex items-center justify-between relative z-10 shadow-inner">
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-300 font-bold uppercase tracking-widest block">Laci Kasir (Est)</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base font-black text-white tracking-tight">
+                      {formatCurrency(activeShift ? activeShift.expectedCash : 0)}
+                    </span>
+                    {!activeShift && (
+                      <span className="bg-red-500/20 text-red-300 border border-red-500/40 text-[7px] font-black uppercase px-1.5 py-0.5 rounded-md">
+                        Shift Tutup
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {activeShift ? (
+                  <button 
+                    onClick={() => setActiveTab('shift')}
+                    className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] rounded-lg transition-all active:scale-95 shadow-md uppercase tracking-wider"
+                  >
+                    Tutup Kasir
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => setActiveTab('shift')}
+                    className="px-3 py-1 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-[10px] rounded-lg transition-all active:scale-95 shadow-md border border-red-400/30 uppercase tracking-wider"
+                  >
+                    Buka Shift
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* BILAH ATAS (HEADER) - DESKTOP ONLY */}
+        <header className="hidden md:flex h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 z-10 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold capitalize text-slate-800 dark:text-slate-100">
               {activeTab === 'kasir' ? 'Mesin Kasir' : 
@@ -696,7 +797,7 @@ export default function App() {
               <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-amber-500'} animate-pulse`} />
               {isOnline ? 'Cloud Terhubung' : 'Mode Lokal (Offline)'}
             </div>
-
+ 
             <button
               onClick={handleSyncData}
               disabled={isSyncing}
@@ -705,7 +806,7 @@ export default function App() {
             >
               <RefreshCcw size={16} className={isSyncing ? 'animate-spin' : ''} />
             </button>
-
+ 
             <button
               onClick={() => setShowHotkeyGuide(true)}
               title="Panduan Pintasan Keyboard"
@@ -714,25 +815,25 @@ export default function App() {
               <Keyboard size={16} />
             </button>
           </div>
-
+ 
           <div className="flex items-center gap-3">
             {activeTab === 'kasir' && (
               <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                 <button 
                   onClick={() => setPosSubTab('produk')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${posSubTab === 'produk' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${posSubTab === 'produk' ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                 >
                   Daftar Produk
                 </button>
                 <button 
                   onClick={() => setPosSubTab('riwayat')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${posSubTab === 'riwayat' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${posSubTab === 'riwayat' ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                 >
                   Transaksi POS
                 </button>
               </div>
             )}
-
+ 
             {/* Quick access button to Customer Display Screen */}
             <button
               onClick={() => {
@@ -753,7 +854,7 @@ export default function App() {
               <Monitor size={14} className="text-red-600 animate-pulse" />
               <span className="hidden md:inline">Layar Pelanggan</span>
             </button>
-
+ 
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 relative text-slate-600 dark:text-slate-300"
@@ -763,9 +864,9 @@ export default function App() {
             </button>
           </div>
         </header>
-
+ 
         {/* AREA HALAMAN DINAMIS (SUSPENSE) */}
-        <main className="flex-1 overflow-hidden p-6 relative bg-slate-50 dark:bg-slate-950">
+        <main className="flex-1 overflow-hidden p-3 md:p-6 pb-20 md:pb-6 relative bg-slate-50 dark:bg-slate-950">
           <Suspense fallback={
             <div className="absolute inset-0 flex items-center justify-center bg-slate-100/50 dark:bg-slate-950/50 backdrop-blur-xs">
               <div className="flex flex-col items-center gap-3">
@@ -815,7 +916,7 @@ export default function App() {
                       </AnimatePresence>
                     </div>
 
-                    <div className="lg:col-span-1 xl:col-span-1 h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <div className="hidden lg:flex lg:col-span-1 xl:col-span-1 h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                       <Cart 
                         items={cart} 
                         taxRate={storeSettings?.taxRate || 0}
@@ -911,6 +1012,239 @@ export default function App() {
           </Suspense>
         </main>
       </div>
+
+      {/* MOBILE FLOATING CART BUBBLE (LIVIN' CHEKOUT POP) */}
+      {cart.length > 0 && activeTab === 'kasir' && !showMobileCart && (
+        <div className="md:hidden fixed bottom-20 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-sm">
+          <motion.button 
+            initial={{ opacity: 0, y: 15, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 15, scale: 0.9 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowMobileCart(true)}
+            className="w-full bg-red-600 dark:bg-red-500 text-white font-extrabold text-xs px-5 py-3.5 rounded-full shadow-2xl flex items-center justify-between border border-red-400/30"
+          >
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <ShoppingBag size={16} />
+                <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-slate-950 font-black text-[8px] h-4 w-4 rounded-full flex items-center justify-center border border-white">
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+              </div>
+              <span className="uppercase tracking-wider">Tinjau Keranjang</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-xs text-amber-300">
+                {formatCurrency(cart.reduce((sum, item) => sum + item.price * item.quantity, 0))}
+              </span>
+            </div>
+          </motion.button>
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM NAVIGATION BAR (FIXED BOTTOM - "LIVIN' MERCHANT" STYLED) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-around px-2 pb-1 z-40 shadow-[0_-3px_12px_rgba(0,0,0,0.05)]">
+        {[
+          { id: 'kasir', label: 'Kasir', icon: ShoppingBag },
+          { id: 'produk', label: 'Stok', icon: Package },
+          { id: 'laporan', label: 'Laporan', icon: BarChart3 },
+          { id: 'shift', label: 'Shift', icon: Clock },
+        ].map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id && !showLainnyaMenu;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveTab(item.id);
+                setShowLainnyaMenu(false);
+              }}
+              className="flex flex-col items-center justify-center flex-1 h-full relative"
+            >
+              {isActive && (
+                <motion.span 
+                  layoutId="activeTabMobileDot"
+                  className="absolute top-0.5 w-6 h-0.5 rounded-full bg-red-650 dark:bg-red-450"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+              <Icon className={`w-5 h-5 transition-transform ${isActive ? 'text-red-600 dark:text-red-450 scale-110 font-bold' : 'text-slate-400 dark:text-slate-500 hover:text-slate-650'}`} />
+              <span className={`text-[10px] font-bold mt-1 tracking-tight transition-colors ${isActive ? 'text-red-600 dark:text-red-450 font-black' : 'text-slate-400 dark:text-slate-500'}`}>
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+        
+        {/* Lainnya Button */}
+        <button
+          onClick={() => setShowLainnyaMenu(true)}
+          className="flex flex-col items-center justify-center flex-1 h-full relative"
+        >
+          {showLainnyaMenu && (
+            <div className="absolute top-0.5 w-6 h-0.5 rounded-full bg-red-650 dark:bg-red-450" />
+          )}
+          <Menu className={`w-5 h-5 transition-transform ${showLainnyaMenu ? 'text-red-600 dark:text-red-450 scale-110 font-bold' : 'text-slate-400 dark:text-slate-500 hover:text-slate-650'}`} />
+          <span className={`text-[10px] font-bold mt-1 tracking-tight transition-colors ${showLainnyaMenu ? 'text-red-600 dark:text-red-450 font-black' : 'text-slate-400 dark:text-slate-500'}`}>
+            Lainnya
+          </span>
+        </button>
+      </div>
+
+      {/* MOBILE BOTTOM SHEET FOR CART */}
+      <AnimatePresence>
+        {showMobileCart && (
+          <div className="fixed inset-0 z-[60] md:hidden flex flex-col justify-end">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMobileCart(false)}
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            />
+            
+            {/* Bottom Sheet Box */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 240 }}
+              className="relative max-h-[85vh] bg-white dark:bg-slate-900 rounded-t-[2.2rem] border-t border-slate-200 dark:border-slate-850 flex flex-col overflow-hidden shadow-2xl z-10"
+            >
+              {/* Pull handle indicator */}
+              <div className="w-12 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto my-3 shrink-0" />
+              
+              {/* Header inside sheet */}
+              <div className="flex justify-between items-center px-5 mb-2 shrink-0">
+                <h3 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-red-600" />
+                  Riwayat Keranjang
+                </h3>
+                <button 
+                  onClick={() => setShowMobileCart(false)}
+                  className="p-1 px-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-[11px] font-extrabold text-slate-500 hover:text-slate-800"
+                >
+                  Tutup
+                </button>
+              </div>
+
+              {/* Scrollable Cart Content */}
+              <div className="flex-1 overflow-y-auto px-4 pb-8 scroll-smooth overscroll-contain">
+                <div className="bg-slate-150/10 dark:bg-slate-950/20 rounded-2xl">
+                  <Cart 
+                    items={cart} 
+                    taxRate={storeSettings?.taxRate || 0}
+                    discount={discount}
+                    vouchers={vouchers}
+                    appliedVoucherCode={appliedVoucherCode}
+                    onUpdateQuantity={updateCartQuantity}
+                    onRemove={removeFromCart}
+                    onCheckout={() => {
+                      setShowMobileCart(false);
+                      setShowPayment(true);
+                    }}
+                    onAddManual={handleAddManual}
+                    onUpdateDiscount={setDiscount}
+                    onApplyVoucher={setAppliedVoucherCode}
+                    clients={customers}
+                    selectedClientId={selectedClientIdForCart}
+                    onSelectClient={setSelectedClientIdForCart}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MOBILE BOTTOM NAV "LAINNYA" SHEET */}
+      <AnimatePresence>
+        {showLainnyaMenu && (
+          <div className="fixed inset-0 z-[60] md:hidden flex flex-col justify-end">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLainnyaMenu(false)}
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            />
+            
+            {/* Bottom Sheet Box */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 240 }}
+              className="relative bg-white dark:bg-slate-900 rounded-t-[2.2rem] border-t border-slate-200 dark:border-slate-800 p-5 pb-8 flex flex-col shadow-2xl z-10"
+            >
+              {/* Pull bar indicator */}
+              <div className="w-12 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-4 shrink-0" />
+              
+              <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest text-center mb-5">
+                Layanan ForsDig Merchant
+              </h3>
+              
+              <div className="grid grid-cols-3 gap-y-5 gap-x-3">
+                {[
+                  { id: 'qr', label: 'Kelola QRIS', icon: Smartphone, color: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50' },
+                  { id: 'promosi', label: 'Promo Banner', icon: Zap, color: 'bg-amber-50 text-amber-600 dark:bg-amber-950/50' },
+                  { id: 'laporan_voucher', label: 'Lap. Voucher', icon: Ticket, color: 'bg-rose-50 text-rose-600 dark:bg-rose-950/50' },
+                  { id: 'karyawan', label: 'Staf & Kasir', icon: Users, color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50' },
+                  { id: 'mitra', label: 'Mitra & Suplier', icon: Truck, color: 'bg-sky-50 text-sky-600 dark:bg-sky-950/50' },
+                  { id: 'pengaturan', label: 'Pengaturan', icon: Settings, color: 'bg-slate-100 text-slate-600 dark:bg-slate-800' },
+                ].map((subItem) => {
+                  const Icon = subItem.icon;
+                  const isActive = activeTab === subItem.id;
+                  return (
+                    <button
+                      key={subItem.id}
+                      onClick={() => {
+                        setActiveTab(subItem.id as any);
+                        setShowLainnyaMenu(false);
+                      }}
+                      className="flex flex-col items-center gap-1.5 group active:scale-95 transition-all text-center"
+                    >
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm relative ${
+                        isActive 
+                          ? 'bg-red-600 text-white dark:bg-red-500' 
+                          : `${subItem.color} hover:scale-105 transition-transform`
+                      }`}>
+                        <Icon className="w-5.5 h-5.5" />
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 truncate w-full">
+                        {subItem.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                {/* Account profile minimal detail */}
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-red-600 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+                    {user?.username?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800 dark:text-slate-100">{user?.username || 'Staff'}</h5>
+                    <p className="text-[10px] text-slate-400 capitalize">{user?.role || 'Kasir'}</p>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 text-red-600 dark:text-red-400 font-extrabold text-[10px] rounded-xl hover:shadow-sm"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>KELUAR</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* MODAL TRANSAKSI KASIR DAN DETAIL NOTA */}
       <AnimatePresence>
