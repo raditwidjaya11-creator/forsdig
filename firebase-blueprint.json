@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User business profiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID" },
+        "username": { "type": "string", "description": "Shorthand handle" },
+        "fullName": { "type": "string", "description": "Full business name" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string" },
+        "balance": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "fullName", "email"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Inventory products",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" }
+      },
+      "required": ["id", "userId", "name"]
+    }
+  },
+  "firestore": {
+    "profiles": {
+      "schema": "Profile",
+      "description": "User Profiles"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Business inventory products collection"
+    },
+    "transactions": {
+      "schema": { "$ref": "object" },
+      "description": "Sales logs and checkout orders"
+    },
+    "suppliers": {
+      "schema": { "$ref": "object" },
+      "description": "Supplier contacts and detail maps"
+    },
+    "customers": {
+      "schema": { "$ref": "object" },
+      "description": "Store customer accounts ledger"
+    },
+    "debts": {
+      "schema": { "$ref": "object" },
+      "description": "Active payables and client receivables"
+    },
+    "store_settings": {
+      "schema": { "$ref": "object" },
+      "description": "Store general options and tax rules"
+    },
+    "balance_mutations": {
+      "schema": { "$ref": "object" },
+      "description": "User ledger and mutation items list"
+    }
+  }
+}

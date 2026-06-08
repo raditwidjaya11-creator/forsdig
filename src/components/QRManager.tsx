@@ -15,7 +15,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { PaymentQR } from '../types';
-import { fetchData, saveData, deleteData } from '../services/supabaseService';
+import { fetchData, saveData, deleteData } from '../services/firebaseService';
 
 interface QRManagerProps {
   initialQrs: PaymentQR[];

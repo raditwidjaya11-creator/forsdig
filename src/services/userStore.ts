@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { isFirebaseConfigured, auth, db } from '../lib/firebase';
+import { doc, getDoc, setDoc, query, collection, where, orderBy, getDocs } from 'firebase/firestore';
 import { UserProfile, BalanceMutation } from '../types';
 import axios from 'axios';
-import { saveData } from './supabaseService';
+import { saveData } from './firebaseService';
 
 const api = axios.create({
   timeout: 15000
@@ -42,8 +43,52 @@ export const useUserStore = create<UserState>((set, get) => ({
       return false;
     }
 
-    if (!isSupabaseConfigured || userId === 'demo-user-id') {
-      set({ userProfile: {
+    // 1. Check local cache first for instant, near-zero loading experience on page load!
+    const cachedProfileRaw = localStorage.getItem('pos_local_user_profile');
+    if (cachedProfileRaw) {
+      try {
+        const cachedProfile = JSON.parse(cachedProfileRaw);
+        if (cachedProfile && cachedProfile.id === userId) {
+          set({ userProfile: cachedProfile });
+          
+          // Trigger asynchronous background refresh without blocking the main workflow!
+          if (isFirebaseConfigured && userId !== 'demo-user-id') {
+            (async () => {
+              try {
+                const docRef = doc(db, 'profiles', userId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                  const data = docSnap.data();
+                  const freshProfile: UserProfile = {
+                    id: docSnap.id,
+                    username: data.username || `user_${String(docSnap.id).substring(0, 5)}`,
+                    fullName: data.fullName || data.full_name || 'User',
+                    email: data.email || '',
+                    phone: data.phone || '',
+                    role: (data.role === 'user' ? 'user' : 'admin') as 'admin' | 'user',
+                    balance: Number(data.balance || 0),
+                    subscriptionStatus: (data.subscriptionStatus || data.subscription_status || 'active') as 'active' | 'expired' | 'suspended',
+                    packageType: data.packageType || data.package_type || 'FREE',
+                    status: (data.status || 'active') as 'active' | 'blocked',
+                    createdAt: data.createdAt || data.created_at || Date.now()
+                  };
+                  set({ userProfile: freshProfile });
+                  localStorage.setItem('pos_local_user_profile', JSON.stringify(freshProfile));
+                }
+              } catch (bgErr) {
+                console.warn("[UserStore Background] Silent profile refresh failed:", bgErr);
+              }
+            })();
+          }
+          return true;
+        }
+      } catch (cacheErr) {
+        console.warn("[UserStore] Error parsing cached user profile profile:", cacheErr);
+      }
+    }
+
+    if (!isFirebaseConfigured || userId === 'demo-user-id') {
+      const demoProfile: UserProfile = {
         id: userId,
         username: 'demo_user',
         fullName: 'Demo User',
@@ -55,102 +100,82 @@ export const useUserStore = create<UserState>((set, get) => ({
         packageType: 'FREE',
         status: 'active',
         createdAt: Date.now()
-      }});
+      };
+      set({ userProfile: demoProfile });
+      localStorage.setItem('pos_local_user_profile', JSON.stringify(demoProfile));
       return true;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const docRef = doc(db, 'profiles', userId);
+      const docSnap = await getDoc(docRef);
 
-      if (error) throw error;
-
-      if (!data) {
-        console.warn("[UserStore] Profile not found in DB for userId:", userId, "Auto-creating profile row...");
+      if (!docSnap.exists()) {
+        console.warn("[UserStore] Profile not found in Firebase Firestore for userId:", userId, "Auto-creating profile row...");
         let email = 'user@forsdig.com';
         let fullName = 'Pemilik Smart POS';
         let phone = '';
 
         try {
-          const { data: { user } } = await supabase.auth.getUser();
+          const user = auth.currentUser;
           if (user) {
             email = user.email || email;
-            fullName = user.user_metadata?.full_name || user.user_metadata?.fullName || fullName;
-            phone = user.user_metadata?.phone || phone;
+            fullName = user.displayName || fullName;
+            phone = user.phoneNumber || phone;
           }
         } catch (uErr) {
           console.warn("[UserStore] Could not fetch authenticated user details:", uErr);
         }
 
-        const fallbackProfile = {
+        const fallbackProfile: UserProfile = {
           id: userId,
           username: email ? email.split('@')[0] : `user_${String(userId).substring(0, 5)}`,
-          full_name: fullName,
+          fullName: fullName,
           email: email,
           phone: phone,
-          role: 'admin',
-          balance: 0,
-          subscription_status: 'active',
-          package_type: 'FREE',
-          status: 'active',
-          created_at: new Date().toISOString()
-        };
-
-        try {
-          const { data: insertedData, error: insertError } = await supabase
-            .from('profiles')
-            .insert(fallbackProfile)
-            .select()
-            .maybeSingle();
-
-          if (insertError) {
-            console.warn("[UserStore] Failed to insert profile into database, using local fallback state so user can proceed:", insertError);
-          } else if (insertedData) {
-            console.log("[UserStore] Profile row successfully created in database:", insertedData);
-          }
-        } catch (dbErr) {
-          console.warn("[UserStore] Database insert exception, proceeding with local fallback state:", dbErr);
-        }
-
-        set({ userProfile: {
-          id: userId,
-          username: fallbackProfile.username,
-          fullName: fallbackProfile.full_name,
-          email: fallbackProfile.email,
-          phone: fallbackProfile.phone,
           role: 'admin',
           balance: 0,
           subscriptionStatus: 'active',
           packageType: 'FREE',
           status: 'active',
           createdAt: Date.now()
-        }});
+        };
+
+        try {
+          await setDoc(doc(db, 'profiles', userId), fallbackProfile);
+          console.log("[UserStore] Profile row successfully created in database.");
+        } catch (dbErr) {
+          console.warn("[UserStore] Database insert exception, proceeding with local fallback state:", dbErr);
+        }
+
+        set({ userProfile: fallbackProfile });
+        localStorage.setItem('pos_local_user_profile', JSON.stringify(fallbackProfile));
         return true;
       }
 
-      set({ userProfile: {
-        id: data.id,
-        username: data.username || `user_${String(data.id).substring(0, 5)}`,
-        fullName: data.full_name || 'User',
+      const data = docSnap.data();
+      const loadedProfile: UserProfile = {
+        id: docSnap.id,
+        username: data.username || `user_${String(docSnap.id).substring(0, 5)}`,
+        fullName: data.fullName || data.full_name || 'User',
         email: data.email || '',
         phone: data.phone || '',
-        role: data.role || 'kasir',
+        role: (data.role === 'user' ? 'user' : 'admin') as 'admin' | 'user',
         balance: Number(data.balance || 0),
-        subscriptionStatus: data.subscription_status || 'active',
-        packageType: data.package_type || 'FREE',
+        subscriptionStatus: data.subscriptionStatus || data.subscription_status || 'active',
+        packageType: data.packageType || data.package_type || 'FREE',
         status: data.status || 'active',
-        createdAt: data.created_at || Date.now()
-      }});
-      
+        createdAt: data.createdAt || data.created_at || Date.now()
+      };
+
+      set({ userProfile: loadedProfile });
+      localStorage.setItem('pos_local_user_profile', JSON.stringify(loadedProfile));
       return true;
     } catch (err: any) {
       console.error("[UserStore] fetchUserProfile Failure:", err.message);
       // Even if fetchUserProfile fails because of network/DB issues, provide a local-first profile
       // so the app stays functional and responsive rather than hanging
-      set({ userProfile: {
+      const localFallbackProfile: UserProfile = {
         id: userId,
         username: `user_${String(userId).substring(0, 5)}`,
         fullName: 'Pemilik Toko (Lokal)',
@@ -162,7 +187,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         packageType: 'FREE',
         status: 'active',
         createdAt: Date.now()
-      }});
+      };
+      set({ userProfile: localFallbackProfile });
+      localStorage.setItem('pos_local_user_profile', JSON.stringify(localFallbackProfile));
       return true;
     }
   },
@@ -175,13 +202,13 @@ export const useUserStore = create<UserState>((set, get) => ({
       const users = (data || []).map((u: any) => ({
         id: u.id,
         username: u.username,
-        fullName: u.full_name,
+        fullName: u.fullName || u.full_name,
         email: u.email,
         phone: u.phone,
         role: u.role,
         balance: u.balance,
         status: u.status,
-        createdAt: new Date(u.created_at).getTime()
+        createdAt: u.createdAt || new Date(u.created_at).getTime()
       }));
       set({ users, isLoading: false });
     } catch (err: any) {
@@ -190,27 +217,33 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   fetchMutations: async (userId) => {
-    if (!isSupabaseConfigured || userId === 'demo-user-id') return;
+    if (!isFirebaseConfigured || userId === 'demo-user-id') return;
 
-    const { data, error } = await supabase
-      .from('balance_mutations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('timestamp', { ascending: false });
-      
-    if (!error) {
-      const mutations = (data || []).map((m: any) => ({
-        id: m.id,
-        userId: m.user_id,
-        amount: m.amount,
-        type: m.type,
-        description: m.description,
-        referenceId: m.reference_id,
-        previousBalance: m.previous_balance,
-        currentBalance: m.current_balance,
-        timestamp: new Date(m.timestamp).getTime()
-      }));
+    try {
+      const q = query(
+        collection(db, 'balance_mutations'),
+        where('userId', '==', userId),
+        orderBy('timestamp', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const mutations: any[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const m = docSnap.data();
+        mutations.push({
+          id: docSnap.id,
+          userId: m.userId || m.user_id,
+          amount: m.amount,
+          type: m.type,
+          description: m.description,
+          referenceId: m.referenceId || m.reference_id,
+          previousBalance: m.previousBalance || m.previous_balance,
+          currentBalance: m.currentBalance || m.current_balance,
+          timestamp: m.timestamp
+        });
+      });
       set({ mutations });
+    } catch (err) {
+      console.error("[UserStore] fetchMutations Error:", err);
     }
   },
 

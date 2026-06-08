@@ -16,7 +16,6 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Voucher } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { formatCurrency, generateUUID } from '../lib/utils';
 import { usePOSStore } from '../services/posStore';
 import { toast } from 'sonner';

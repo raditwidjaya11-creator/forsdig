@@ -127,6 +127,9 @@ export interface Transaction {
     cashierName?: string;
     walletProvider?: string;
     bankName?: string;
+    customerId?: string;
+    customerName?: string;
+    customerPhone?: string;
   };
 }
 

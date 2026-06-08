@@ -1,4 +1,4 @@
-import { Transaction, StoreSettings, PurchaseOrder, Supplier, Product } from '../types';
+import { Transaction, StoreSettings, PurchaseOrder, Supplier, Product, Client } from '../types';
 import { format } from 'date-fns';
 import { formatCurrency } from './utils';
 import jsPDF from 'jspdf';
@@ -186,4 +186,164 @@ export function exportTransactionsToPDF(transactions: Transaction[], settings: S
   doc.text(`TOTAL PENDAPATAN: ${formatCurrency(totalRevenue)}`, 14, finalY);
 
   doc.save(`Laporan_Transaksi_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+}
+
+
+export function exportClientsToCSV(clients: Client[], crmNotes: Record<string, { id: string; text: string; timestamp: string; type: string }[]>, transactions: Transaction[]) {
+  const headers = ['ID Pelanggan', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Belanja (LTV)', 'Jumlah Kunjungan', 'Catatan Interaksi (CRM)'];
+  
+  const rows = clients.map(client => {
+    const clientTxs = transactions.filter(t => 
+      t.paymentDetails?.customerId === client.id || 
+      (t.paymentDetails?.customerName && t.paymentDetails.customerName.toLowerCase() === client.name.toLowerCase()) ||
+      t.paymentDetails?.customerPhone === client.phone
+    );
+    const ltv = clientTxs.reduce((sum, t) => sum + t.total, 0);
+    const count = clientTxs.length;
+
+    const notes = crmNotes[client.id] || [];
+    const notesStr = notes.map(n => {
+      let dateStr = '';
+      try {
+        dateStr = format(new Date(n.timestamp), 'yyyy-MM-dd HH:mm');
+      } catch (e) {
+        dateStr = n.timestamp;
+      }
+      return `[${n.type} ${dateStr}]: ${n.text}`;
+    }).join('; ');
+
+    return [
+      client.id,
+      client.name,
+      client.phone || '-',
+      client.email || '-',
+      client.address || '-',
+      ltv,
+      count,
+      notesStr || '-'
+    ];
+  });
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(value => 
+      typeof value === 'string' ? `"${value.replace(/"/g, '""').replace(/\n/g, ' ')}"` : value
+    ).join(','))
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Laporan_Pelanggan_CRM_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+export function exportClientsToPDF(clients: Client[], crmNotes: Record<string, { id: string; text: string; timestamp: string; type: string }[]>, transactions: Transaction[], settings: StoreSettings) {
+  const doc = new jsPDF();
+  
+  // Header
+  doc.setFontSize(20);
+  doc.setTextColor(220, 38, 38);
+  doc.setFont('helvetica', 'bold');
+  doc.text(settings.name, 14, 22);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.setFont('helvetica', 'normal');
+  doc.text(settings.address, 14, 28);
+  doc.text(`Telp: ${settings.phone} | Email: ${settings.email}`, 14, 33);
+  
+  doc.setDrawColor(230, 230, 230);
+  doc.line(14, 38, 196, 38);
+  
+  doc.setFontSize(14);
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  doc.text('LAPORAN PELANGGAN & RIWAYAT INTERAKSI CRM', 14, 48);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text(`Dicetak pada: ${format(new Date(), 'dd MMMM yyyy HH:mm')}`, 14, 54);
+
+  // Statistics summaries
+  const totalClients = clients.length;
+  let goldCount = 0;
+  let silverCount = 0;
+  let totalNotes = 0;
+
+  clients.forEach(client => {
+    const clientTxs = transactions.filter(t => 
+      t.paymentDetails?.customerId === client.id || 
+      (t.paymentDetails?.customerName && t.paymentDetails.customerName.toLowerCase() === client.name.toLowerCase()) ||
+      t.paymentDetails?.customerPhone === client.phone
+    );
+    const ltv = clientTxs.reduce((sum, t) => sum + t.total, 0);
+    if (ltv >= 1000000) goldCount++;
+    else if (ltv >= 250000) silverCount++;
+    
+    totalNotes += (crmNotes[client.id] || []).length;
+  });
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0);
+  doc.text('RINGKASAN DATABASE PELANGGAN:', 14, 64);
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`• Total Pelanggan Terdaftar: ${totalClients}`, 14, 70);
+  doc.text(`• Pelanggan Gold: ${goldCount}`, 14, 75);
+  doc.text(`• Pelanggan Silver: ${silverCount}`, 80, 70);
+  doc.text(`• Total Catatan Interaksi CRM: ${totalNotes}`, 80, 75);
+
+  const tableColumn = ["ID / Nama", "Kontak", "LTV & Kunjungan", "Catatan CRM"];
+  const tableRows = clients.map(client => {
+    const clientTxs = transactions.filter(t => 
+      t.paymentDetails?.customerId === client.id || 
+      (t.paymentDetails?.customerName && t.paymentDetails.customerName.toLowerCase() === client.name.toLowerCase()) ||
+      t.paymentDetails?.customerPhone === client.phone
+    );
+    const ltv = clientTxs.reduce((sum, t) => sum + t.total, 0);
+    const count = clientTxs.length;
+    
+    const notes = crmNotes[client.id] || [];
+    const notesFormatted = notes.map(n => {
+      let dStr = '';
+      try {
+        dStr = format(new Date(n.timestamp), 'dd/MM/yy');
+      } catch (e) {
+        dStr = '';
+      }
+      return `• [${n.type} ${dStr}] ${n.text}`;
+    }).join('\n');
+
+    return [
+      `${client.name}\nID: #${client.id.substring(0, 8)}`,
+      `${client.phone || '-'}\n${client.email || '-'}`,
+      `${formatCurrency(ltv)}\n(${count}x Transaksi)`,
+      notesFormatted || 'Tidak ada catatan CRM'
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 83,
+    head: [tableColumn],
+    body: tableRows,
+    theme: 'grid',
+    headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold' },
+    styles: { fontSize: 8, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 40 },
+      1: { cellWidth: 40 },
+      2: { cellWidth: 35 },
+      3: { cellWidth: 70 }
+    }
+  });
+
+  doc.save(`Laporan_Pelanggan_CRM_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
 }

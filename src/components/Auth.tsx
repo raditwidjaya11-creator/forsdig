@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, User as UserIcon, Mail, LogIn, UserPlus, ShieldCheck, Store, Loader2, AlertTriangle } from 'lucide-react';
 import { UserProfile } from '../types';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { isFirebaseConfigured } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
 interface AuthProps {
@@ -35,13 +35,13 @@ export default function Auth({ onLogin }: AuthProps) {
         if (onLogin) {
           // Backward compatibility if parent expects a callback
           onLogin({
-            id: isSupabaseConfigured ? 'temp' : 'demo-user-id',
-            username: isSupabaseConfigured ? email.split('@')[0] : 'demo_user',
-            fullName: isSupabaseConfigured ? fullName : 'Demo Usaha',
+            id: isFirebaseConfigured ? 'temp' : 'demo-user-id',
+            username: isFirebaseConfigured ? email.split('@')[0] : 'demo_user',
+            fullName: isFirebaseConfigured ? fullName : 'Demo Usaha',
             email: email || 'demo@forsdig.com',
             phone: phone || '08123456789',
             role: 'admin',
-            balance: isSupabaseConfigured ? 0 : 1000000,
+            balance: isFirebaseConfigured ? 0 : 1000000,
             subscriptionStatus: 'active',
             packageType: 'FREE',
             status: 'active',
@@ -77,7 +77,7 @@ export default function Auth({ onLogin }: AuthProps) {
         </div>
 
         <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
-          {!isSupabaseConfigured && (
+          {!isFirebaseConfigured && (
             <div className="bg-amber-50 px-6 py-4 border-b border-amber-100 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
                 <AlertTriangle size={20} />

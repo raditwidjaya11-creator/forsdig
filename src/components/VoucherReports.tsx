@@ -22,9 +22,9 @@ import {
   Info
 } from 'lucide-react';
 import { Voucher } from '../types';
-import { fetchData as fetchCloudData } from '../services/supabaseService';
+import { fetchData as fetchCloudData } from '../services/firebaseService';
 import { formatCurrency } from '../lib/utils';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { isFirebaseConfigured } from '../lib/firebase';
 
 const COLORS = ['#F97316', '#3B82F6', '#10B981', '#A855F7', '#EF4444'];
 
@@ -38,7 +38,7 @@ const VoucherReports = () => {
   }, []);
 
   const fetchData = async () => {
-    if (!isSupabaseConfigured) {
+    if (!isFirebaseConfigured) {
       setIsLoading(false);
       return;
     }

@@ -23,12 +23,23 @@ import {
   Edit2,
   Trash2,
   Share2,
-  Download
+  Download,
+  Award,
+  MessageSquare,
+  PlusCircle,
+  Sparkles,
+  Heart,
+  User,
+  BarChart3,
+  Target,
+  PieChart,
+  Tag
 } from 'lucide-react';
 import { Supplier, Client, PurchaseOrder, DebtReceivable, Product, StoreSettings, Transaction } from '../types';
 import { formatCurrency, generateUUID } from '../lib/utils';
 import { format } from 'date-fns';
-import { exportPurchaseOrderToPDF } from '../lib/exportUtils';
+import { exportPurchaseOrderToPDF, exportClientsToCSV, exportClientsToPDF } from '../lib/exportUtils';
+import { toast } from 'sonner';
 
 interface PartnerManagerProps {
   suppliers: Supplier[];
@@ -77,6 +88,41 @@ export default function PartnerManager({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // CRM States
+  const [selectedClientCRM, setSelectedClientCRM] = useState<Client | null>(null);
+  const [crmNotes, setCrmNotes] = useState<Record<string, { id: string; text: string; timestamp: string; type: string }[]>>(() => {
+    const saved = localStorage.getItem('forsdig_crm_notes');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [newCRMNoteText, setNewCRMNoteText] = useState('');
+  const [newCRMNoteType, setNewCRMNoteType] = useState<'Note' | 'FollowUp' | 'Complaint' | 'Feedback'>('Note');
+
+  const addCrmNote = (clientId: string) => {
+    if (!newCRMNoteText.trim()) return;
+    const note = {
+      id: generateUUID(),
+      text: newCRMNoteText.trim(),
+      timestamp: new Date().toISOString(),
+      type: newCRMNoteType
+    };
+    const updated = {
+      ...crmNotes,
+      [clientId]: [note, ...(crmNotes[clientId] || [])]
+    };
+    setCrmNotes(updated);
+    localStorage.setItem('forsdig_crm_notes', JSON.stringify(updated));
+    setNewCRMNoteText('');
+  };
+
+  const deleteCrmNote = (clientId: string, noteId: string) => {
+    const updated = {
+      ...crmNotes,
+      [clientId]: (crmNotes[clientId] || []).filter(n => n.id !== noteId)
+    };
+    setCrmNotes(updated);
+    localStorage.setItem('forsdig_crm_notes', JSON.stringify(updated));
+  };
   
   // Form States
   const [formData, setFormData] = useState({
@@ -351,13 +397,39 @@ export default function PartnerManager({
             className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500 transition-all text-sm"
           />
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all text-sm shadow-xl shadow-red-100"
-        >
-          <Plus size={18} />
-          Tambah Client
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            type="button"
+            onClick={() => exportClientsToPDF(clients, crmNotes, transactions, storeSettings)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 hover:border-red-200 text-slate-700 hover:text-red-600 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-sm cursor-pointer"
+            title="Ekspor Data CRM ke PDF"
+          >
+            <Download size={14} className="text-red-500" />
+            Export PDF
+          </motion.button>
+          
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            type="button"
+            onClick={() => exportClientsToCSV(clients, crmNotes, transactions)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 hover:border-emerald-200 text-slate-700 hover:text-emerald-600 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-sm cursor-pointer"
+            title="Ekspor Data CRM ke CSV/Excel"
+          >
+            <FileText size={14} className="text-emerald-500" />
+            Export CSV
+          </motion.button>
+
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all text-sm shadow-xl shadow-red-100 font-extrabold pb-3"
+          >
+            <Plus size={18} />
+            Tambah Client
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -369,10 +441,14 @@ export default function PartnerManager({
             className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"
           >
             <div className="flex justify-between items-start mb-4">
-              <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors">
+              <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-red-600 transition-colors">
                 <Users size={24} />
               </div>
-              <button className="text-slate-400 hover:text-slate-600">
+              <button 
+                onClick={() => setSelectedClientCRM(c)}
+                className="p-2 text-slate-400 hover:text-red-600 hover:bg-slate-50 rounded-xl transition-all"
+                title="Buka Portal CRM"
+              >
                 <ChevronRight size={20} />
               </button>
             </div>
@@ -393,12 +469,36 @@ export default function PartnerManager({
               </div>
             </div>
 
+            {(() => {
+              const topCatData = getClientTopCategories(c.id, c.name, c.phone);
+              const topCat = topCatData.topCategories[0];
+              if (!topCat) return null;
+              return (
+                <div className="mt-4 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Target size={10} className="text-red-500" />
+                    Top Kategori
+                  </span>
+                  <span className="text-[10px] font-black text-red-650 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100 uppercase tracking-wider">
+                    {topCat.name}
+                  </span>
+                </div>
+              );
+            })()}
+
             <div className="flex gap-2 mt-6">
               <button 
-                onClick={() => handleEditClick('clients', c)}
-                className="flex-1 py-3 bg-white text-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-200 flex items-center justify-center gap-2"
+                onClick={() => setSelectedClientCRM(c)}
+                className="flex-1 py-3 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all border border-red-100/50 flex items-center justify-center gap-2"
               >
-                <Edit2 size={14} />
+                <Heart size={14} className="fill-red-500 text-red-600" />
+                CRM
+              </button>
+              <button 
+                onClick={() => handleEditClick('clients', c)}
+                className="flex-[0.8] py-3 bg-white text-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-200 flex items-center justify-center gap-2"
+              >
+                <Edit2 size={13} />
                 Edit
               </button>
               <button 
@@ -1065,6 +1165,84 @@ export default function PartnerManager({
     );
   };
 
+  const getClientCRMStats = (client: Client) => {
+    const clientTxs = transactions.filter(t => 
+      t.paymentDetails?.customerId === client.id || 
+      (t.paymentDetails?.customerName && t.paymentDetails.customerName.toLowerCase() === client.name.toLowerCase()) ||
+      t.paymentDetails?.customerPhone === client.phone
+    );
+
+    const ltv = clientTxs.reduce((sum, t) => sum + t.total, 0);
+    const count = clientTxs.length;
+
+    let tierColor = 'from-amber-600 to-amber-700 text-amber-50';
+    let tierLabel = 'Bronze Pelanggan';
+
+    if (ltv >= 1000000) {
+      tierColor = 'from-yellow-400 via-amber-500 to-amber-600 text-slate-900 font-extrabold';
+      tierLabel = '👑 Partner Gold';
+    } else if (ltv >= 250000) {
+      tierColor = 'from-slate-300 via-slate-400 to-slate-500 text-slate-900';
+      tierLabel = '🥈 Pelanggan Silver';
+    }
+
+    return { ltv, count, tierColor, tierLabel, clientTxs };
+  };
+
+  const getClientTopCategories = (clientId: string, clientName: string, clientPhone: string) => {
+    const clientTxs = transactions.filter(t => 
+      t.paymentDetails?.customerId === clientId || 
+      (t.paymentDetails?.customerName && t.paymentDetails.customerName.toLowerCase() === clientName.toLowerCase()) ||
+      t.paymentDetails?.customerPhone === clientPhone
+    );
+
+    const categoryCounts: Record<string, { quantity: number; spend: number; rawItems: Record<string, number> }> = {};
+    let totalItemsPurchased = 0;
+
+    clientTxs.forEach(tx => {
+      tx.items?.forEach(item => {
+        const category = item.category || 'Umum';
+        const qty = Number(item.quantity || 1);
+        const itemSpend = Number(item.price || 0) * qty;
+
+        totalItemsPurchased += qty;
+
+        if (!categoryCounts[category]) {
+          categoryCounts[category] = { quantity: 0, spend: 0, rawItems: {} };
+        }
+        categoryCounts[category].quantity += qty;
+        categoryCounts[category].spend += itemSpend;
+        categoryCounts[category].rawItems[item.name] = (categoryCounts[category].rawItems[item.name] || 0) + qty;
+      });
+    });
+
+    const sorted = Object.entries(categoryCounts)
+      .map(([name, data]) => {
+        const topItem = Object.entries(data.rawItems)
+          .sort((a, b) => b[1] - a[1])[0]?.[0] || 'Produk';
+
+        return {
+          name,
+          quantity: data.quantity,
+          spend: data.spend,
+          percentage: totalItemsPurchased > 0 ? Math.round((data.quantity / totalItemsPurchased) * 105) : 0, // Scaled visual percentage
+          favoriteItem: topItem
+        };
+      })
+      .map(cat => ({
+        ...cat,
+        percentage: cat.percentage > 100 ? 100 : cat.percentage // Cap at 100%
+      }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 3);
+
+    return {
+      topCategories: sorted,
+      totalItemsPurchased,
+      hasPurchases: sorted.length > 0
+    };
+  };
+
   return (
     <div className="p-4 md:p-8 pb-32 md:pb-8">
       <div className="mb-6 md:mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -1516,6 +1694,393 @@ export default function PartnerManager({
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* Client CRM Detail Modal */}
+      <AnimatePresence>
+        {selectedClientCRM && (() => {
+          const stats = getClientCRMStats(selectedClientCRM);
+          const topCategoryData = getClientTopCategories(selectedClientCRM.id, selectedClientCRM.name, selectedClientCRM.phone);
+          const notesHistory = crmNotes[selectedClientCRM.id] || [];
+          const rawPhone = selectedClientCRM.phone || '';
+          const digits = rawPhone.replace(/[^0-9]/g, '');
+          const cleanPhone = digits.startsWith('0') 
+            ? '62' + digits.slice(1) 
+            : digits;
+
+          return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 overflow-hidden">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedClientCRM(null)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-5xl bg-slate-50 rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+              >
+                {/* Header card with gradient details */}
+                <div className="p-8 bg-white border-b border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shrink-0 relative">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-red-55 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center font-black text-2xl shadow-inner uppercase">
+                      {selectedClientCRM.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-2xl font-black text-slate-800 leading-none">{selectedClientCRM.name}</h3>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-gradient-to-r ${stats.tierColor} shadow-sm`}>
+                          {stats.tierLabel}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-semibold mt-1">ID Pelanggan: #{selectedClientCRM.id.slice(0, 8)}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedClientCRM(null)} 
+                    className="p-3 hover:bg-slate-100 rounded-full transition-colors absolute top-6 right-6 md:static"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    {/* Left Panel: CRM metrics and Actions */}
+                    <div className="lg:col-span-1 space-y-6">
+                      
+                      {/* CRM KPIs */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Sparkles size={14} className="text-red-500" />
+                          Informasi & Loyalitas
+                        </h4>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 bg-slate-50 rounded-2xl">
+                            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Total Belanja</span>
+                            <span className="text-lg font-black text-slate-850 text-slate-800 block">{formatCurrency(stats.ltv)}</span>
+                          </div>
+                          <div className="p-4 bg-slate-50 rounded-2xl">
+                            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Kunjungan</span>
+                            <span className="text-lg font-black text-slate-800 block">{stats.count} x</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 pt-3 border-t border-slate-100">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-400 font-semibold">Telepon</span>
+                            <span className="font-bold text-slate-800">{selectedClientCRM.phone}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-400 font-semibold">Email</span>
+                            <span className="font-bold text-slate-800 truncate max-w-[150px]" title={selectedClientCRM.email}>{selectedClientCRM.email}</span>
+                          </div>
+                          <div className="text-xs pt-1">
+                            <span className="text-slate-400 font-semibold block mb-1">Alamat</span>
+                            <span className="font-medium text-slate-600 block bg-slate-50/50 p-3 rounded-xl border border-slate-100">{selectedClientCRM.address}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Analisis Preferensi & Pemasaran Personalisasi */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Target size={14} className="text-red-500" />
+                          Preferensi Belanja & Pemasaran Personalisasi
+                        </h4>
+
+                        {!topCategoryData.hasPurchases ? (
+                          <div className="p-4 bg-slate-50/70 rounded-2xl text-center space-y-1">
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-wide">Data Pembelian Kosong</p>
+                            <p className="text-[10px] text-slate-400">Belum ada riwayat produk terdaftar untuk pelanggan ini untuk menganalisis preferensi.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-5">
+                            {/* Visual List Categories progress of Top 3 */}
+                            <div className="space-y-3.5">
+                              {topCategoryData.topCategories.map((cat, idx) => {
+                                const colors = [
+                                  { bg: 'bg-red-500', track: 'bg-red-50', text: 'text-red-600', border: 'border-red-100' },
+                                  { bg: 'bg-blue-500', track: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-100' },
+                                  { bg: 'bg-amber-500', track: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-100' }
+                                ][idx] || { bg: 'bg-slate-500', track: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-100' };
+
+                                return (
+                                  <div key={cat.name} className="space-y-1.5">
+                                    <div className="flex justify-between items-center text-xs">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`w-2 h-2 rounded-full ${colors.bg}`} />
+                                        <span className="font-extrabold text-slate-700 capitalize">{cat.name.toLowerCase()}</span>
+                                      </div>
+                                      <span className="text-slate-500 font-bold text-[10px]">
+                                        {cat.quantity}x dibeli ({cat.percentage}%)
+                                      </span>
+                                    </div>
+                                    {/* Progress track */}
+                                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                      <motion.div 
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${cat.percentage}%` }}
+                                        transition={{ duration: 0.8, ease: 'easeOut', delay: idx * 0.15 }}
+                                        className={`h-full rounded-full ${colors.bg}`}
+                                      />
+                                    </div>
+                                    <div className="flex justify-between text-[9px] text-slate-400 font-medium">
+                                      <span>Fav: <strong className="text-slate-600 font-semibold">{cat.favoriteItem}</strong></span>
+                                      <span>Omset: <strong className="text-slate-600 font-semibold">{formatCurrency(cat.spend)}</strong></span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Direct Marketing Insight */}
+                            {(() => {
+                              const favoriteCat = topCategoryData.topCategories[0];
+                              const promoMessage = `Halo Kak ${selectedClientCRM.name}, karena Anda sering melakukan pemesanan produk kategori ${favoriteCat.name} (seperti ${favoriteCat.favoriteItem}) di ${storeSettings.name || 'toko kami'}, kami ingin menawarkan promo voucher potongan khusus 15% untuk repeat order produk favorit Anda ini! Tertarik mampir ke toko? 😊`;
+                              
+                              return (
+                                <div className="p-4 bg-red-50/50 border border-red-100/60 rounded-2xl space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <Sparkles size={14} className="text-red-500 animate-pulse" />
+                                    <span className="text-[9px] font-black text-red-600 uppercase tracking-widest">Penawaran Segmentasi</span>
+                                  </div>
+                                  <p className="text-[11px] font-bold leading-relaxed text-slate-600">
+                                    Member ini paling responsif untuk produk kategori <span className="text-red-500 bg-red-50 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{favoriteCat.name}</span>. Hubungkan mereka kembali dengan promosi personalisasi!
+                                  </p>
+                                  
+                                  {/* Custom Outreach Campaign Link */}
+                                  <div className="flex gap-2">
+                                    <a
+                                      href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(promoMessage)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-red-100"
+                                    >
+                                      <MessageSquare size={12} />
+                                      WhatsApp Promo
+                                    </a>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(promoMessage);
+                                        toast.success('Pesan kampanye berhasil disalin!');
+                                      }}
+                                      className="p-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl transition-all"
+                                      title="Salin Pesan Promosi"
+                                    >
+                                      <FileText size={13} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* CRM WhatsApp Outreach */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <MessageSquare size={14} className="text-green-500" />
+                          Hubungan Pelanggan (Outreach)
+                        </h4>
+                        
+                        <p className="text-xs text-slate-500">Kirim pesan WhatsApp personalisasi instan dengan template di bawah ini:</p>
+
+                        <div className="space-y-3 pt-2">
+                          {/* Template 1 */}
+                          <a 
+                            href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Halo ${selectedClientCRM.name}, kami sangat berterima kasih atas kepercayaan Anda menjadi pelanggan loyal kami di ${storeSettings.name || 'toko kami'}. Semoga hari Anda menyenangkan!`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full p-3 bg-green-50 text-green-700 hover:bg-green-100 rounded-2xl text-xs font-bold text-left flex items-start gap-2.5 transition-all group"
+                          >
+                            <MessageSquare size={14} className="shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                            <div>
+                              <span className="block font-black uppercase text-[8px] tracking-widest text-green-600 mb-0.5">Greeting & Loyalty</span>
+                              Kirim Ucapan Terima Kasih
+                            </div>
+                          </a>
+
+                          {/* Template 2 */}
+                          <a 
+                            href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Halo Kak ${selectedClientCRM.name}, dapatkan penawaran khusus & diskon spesial hari ini bagi member setia di ${storeSettings.name || 'toko kami'}. Hubungi kami kembali untuk info selengkapnya ya!`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full p-3 bg-red-50 text-red-700 hover:bg-red-100 rounded-2xl text-xs font-bold text-left flex items-start gap-2.5 transition-all group"
+                          >
+                            <Sparkles size={14} className="shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                            <div>
+                              <span className="block font-black uppercase text-[8px] tracking-widest text-red-600 mb-0.5">Outreach Promo</span>
+                              Bagikan Info Diskon Spesial
+                            </div>
+                          </a>
+
+                          {/* Template 3 */}
+                          {debts.filter(d => d.partnerId === selectedClientCRM.id && d.status === 'Belum Lunas').length > 0 && (
+                            <a 
+                              href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Halo ${selectedClientCRM.name}, ini adalah pengingat ramah mengenai tagihan outstanding Anda di ${storeSettings.name || 'toko kami'} sebesar ${formatCurrency((debts.find(d => d.partnerId === selectedClientCRM.id && d.status === 'Belum Lunas')?.remainingAmount || 0))}. Terima kasih banyak atas kerjasamanya.`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full p-3 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-2xl text-xs font-bold text-left flex items-start gap-2.5 transition-all group border border-amber-100"
+                            >
+                              <AlertCircle size={14} className="shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                              <div>
+                                <span className="block font-black uppercase text-[8px] tracking-widest text-amber-600 mb-0.5">Tagihan Jatuh Tempo</span>
+                                Pengingat Piutang Outstanding
+                              </div>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Right Panel: Notes taking & Transaction History */}
+                    <div className="lg:col-span-2 space-y-6">
+                      
+                      {/* Notes taking section */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <PlusCircle size={15} className="text-red-600" />
+                            Catatan CRM & Interaksi
+                          </h4>
+                          <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[9px] font-extrabold">{notesHistory.length} Catatan</span>
+                        </div>
+
+                        {/* Text note fields */}
+                        <div className="space-y-3">
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <select
+                              value={newCRMNoteType}
+                              onChange={(e) => setNewCRMNoteType(e.target.value as any)}
+                              className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500"
+                            >
+                              <option value="Note">📝 Catatan Umum</option>
+                              <option value="FollowUp">📞 Follow-Up</option>
+                              <option value="Complaint">⚠️ Komplain</option>
+                              <option value="Feedback">⭐ Masukan</option>
+                            </select>
+                            <input 
+                              type="text"
+                              value={newCRMNoteText}
+                              onChange={(e) => setNewCRMNoteText(e.target.value)}
+                              placeholder="Ketik catatan aktivitas atau preferensi pelanggan..."
+                              className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-red-500 font-medium"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  addCrmNote(selectedClientCRM.id);
+                                }
+                              }}
+                            />
+                            <button 
+                              onClick={() => addCrmNote(selectedClientCRM.id)}
+                              className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-1 shrink-0 justify-center"
+                            >
+                              Tambah
+                            </button>
+                          </div>
+
+                          {/* Notes History list */}
+                          <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 select-none custom-scrollbar">
+                            {notesHistory.map(note => (
+                              <div key={note.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                      note.type === 'Complaint' ? 'bg-red-100 text-red-600' :
+                                      note.type === 'Feedback' ? 'bg-blue-105 bg-blue-100 text-blue-600' :
+                                      note.type === 'FollowUp' ? 'bg-amber-100 text-amber-600' :
+                                      'bg-slate-200 text-slate-600'
+                                    }`}>
+                                      {note.type}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 font-medium">
+                                      {format(new Date(note.timestamp), 'dd MMM yyyy, HH:mm')}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs font-semibold text-slate-700">{note.text}</p>
+                                </div>
+                                <button 
+                                  onClick={() => deleteCrmNote(selectedClientCRM.id, note.id)}
+                                  className="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors"
+                                  title="Hapus Catatan"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            ))}
+                            {notesHistory.length === 0 && (
+                              <p className="text-slate-400 text-xs italic text-center py-6">Belum ada catatan interaksi untuk pelanggan ini.</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Transaction list */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <History size={15} className="text-blue-600" />
+                            Riwayat Transaksi Anggota
+                          </h4>
+                          <span className="px-2.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[9px] font-extrabold">{stats.clientTxs.length} Transaksi</span>
+                        </div>
+
+                        <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
+                          {stats.clientTxs.map(tx => (
+                            <div 
+                              key={tx.id} 
+                              className="p-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-100 rounded-2xl flex items-center justify-between gap-4 transition-all"
+                            >
+                              <div className="space-y-0.5">
+                                <span className="text-[10px] font-black text-slate-700 tracking-wide block uppercase">
+                                  #{tx.id.slice(0, 8)}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-semibold block uppercase">
+                                  {format(new Date(tx.timestamp), 'dd MMMM yyyy, HH:mm')} • {tx.paymentMethod}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="font-extrabold text-slate-900 text-sm">
+                                  {formatCurrency(tx.total)}
+                                </span>
+                                <button 
+                                  onClick={() => {
+                                    onViewInvoice(tx, {
+                                      name: selectedClientCRM.name,
+                                      phone: selectedClientCRM.phone,
+                                      email: selectedClientCRM.email,
+                                      address: selectedClientCRM.address
+                                    });
+                                  }}
+                                  className="p-2 bg-white hover:bg-red-50 text-red-600 border border-slate-200/60 rounded-xl transition-all"
+                                  title="Lihat Nota"
+                                >
+                                  <FileText size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {stats.clientTxs.length === 0 && (
+                            <p className="text-slate-400 text-xs italic text-center py-6">Belum ada transaksi pembelian tercatat.</p>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
     </div>
   );

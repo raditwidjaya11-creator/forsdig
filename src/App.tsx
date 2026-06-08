@@ -232,6 +232,7 @@ export default function App() {
   const [lastTransaction, setLastTransaction] = useState<Transaction | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<{ name: string; address?: string; phone?: string; email?: string; type?: string } | undefined>(undefined);
+  const [selectedClientIdForCart, setSelectedClientIdForCart] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   
@@ -363,7 +364,7 @@ export default function App() {
     try {
       if (user?.id) {
         await Promise.all([
-          fetchInitialData(),
+          fetchInitialData(true),
           fetchMutations(user.id)
         ]);
         setLastSync(Date.now());
@@ -510,13 +511,17 @@ export default function App() {
       timestamp: Date.now(),
       staffId,
       resellerId,
-      paymentDetails: details ? {
-        ...details,
-        cashierName: user?.username
-      } : undefined
+      paymentDetails: {
+        ...(details || {}),
+        cashierName: user?.username,
+        customerId: customers.find(c => c.id === selectedClientIdForCart)?.id,
+        customerName: customers.find(c => c.id === selectedClientIdForCart)?.name,
+        customerPhone: customers.find(c => c.id === selectedClientIdForCart)?.phone,
+      }
     };
 
     await addTransaction(newTransaction);
+    setSelectedClientIdForCart(null);
     
     for (const item of cart) {
       const product = products.find(p => p.id === item.id);
@@ -817,6 +822,9 @@ export default function App() {
                         onAddManual={handleAddManual}
                         onUpdateDiscount={setDiscount}
                         onApplyVoucher={setAppliedVoucherCode}
+                        clients={customers}
+                        selectedClientId={selectedClientIdForCart}
+                        onSelectClient={setSelectedClientIdForCart}
                       />
                     </div>
                   </div>

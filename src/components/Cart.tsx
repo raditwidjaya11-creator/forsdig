@@ -1,6 +1,6 @@
 import React, { useState, memo, useMemo } from 'react';
-import { Product, Voucher } from '../types';
-import { Plus, Minus, Trash2, ShoppingCart, CreditCard, Keyboard, Ticket, Tag } from 'lucide-react';
+import { Product, Voucher, Client } from '../types';
+import { Plus, Minus, Trash2, ShoppingCart, CreditCard, Keyboard, Ticket, Tag, User, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from '../lib/utils';
 import { toast } from 'sonner';
@@ -17,6 +17,9 @@ interface CartProps {
   onAddManual: (price: number) => void;
   onUpdateDiscount: (value: number) => void;
   onApplyVoucher: (code: string | null) => void;
+  clients?: Client[];
+  selectedClientId?: string | null;
+  onSelectClient?: (id: string | null) => void;
 }
 
 const CartItem = memo(({ item, onUpdateQuantity, onRemove }: { item: Product & { quantity: number }, onUpdateQuantity: (id: string, delta: number) => void, onRemove: (id: string) => void }) => (
@@ -74,7 +77,10 @@ export default function Cart({
   onCheckout, 
   onAddManual, 
   onUpdateDiscount,
-  onApplyVoucher
+  onApplyVoucher,
+  clients = [],
+  selectedClientId = null,
+  onSelectClient
 }: CartProps) {
   const [manualPrice, setManualPrice] = useState('');
   const [showManual, setShowManual] = useState(false);
@@ -305,6 +311,24 @@ export default function Cart({
           </div>
         </motion.form>
       )}
+
+      {/* Client / CRM Selector */}
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 text-slate-500">
+          <User size={14} className="text-red-500" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Pelanggan POS</span>
+        </div>
+        <select
+          value={selectedClientId || ''}
+          onChange={(e) => onSelectClient?.(e.target.value || null)}
+          className="bg-transparent border-0 text-xs font-bold text-slate-800 focus:outline-none focus:ring-0 max-w-[150px] cursor-pointer text-right appearance-none"
+        >
+          <option value="">Umum (Pelanggan)</option>
+          {clients?.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <AnimatePresence initial={false}>
