@@ -866,7 +866,7 @@ export default function App() {
         </header>
  
         {/* AREA HALAMAN DINAMIS (SUSPENSE) */}
-        <main className="flex-1 overflow-hidden p-3 md:p-6 pb-20 md:pb-6 relative bg-slate-50 dark:bg-slate-950">
+        <main className="flex-1 overflow-y-auto md:overflow-hidden p-3 md:p-6 pb-24 md:pb-6 relative bg-slate-50 dark:bg-slate-950 scroll-smooth overscroll-contain">
           <Suspense fallback={
             <div className="absolute inset-0 flex items-center justify-center bg-slate-100/50 dark:bg-slate-950/50 backdrop-blur-xs">
               <div className="flex flex-col items-center gap-3">
@@ -882,11 +882,11 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.15 }}
-                className="h-full"
+                className="h-auto md:h-full"
               >
                 {activeTab === 'kasir' && (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 h-full items-stretch overflow-hidden">
-                    <div className="lg:col-span-2 xl:col-span-3 flex flex-col h-full overflow-hidden">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 h-auto md:h-full items-stretch overflow-visible md:overflow-hidden">
+                    <div className="lg:col-span-2 xl:col-span-3 flex flex-col h-auto md:h-full overflow-visible md:overflow-hidden">
                       <AnimatePresence mode="wait">
                         {posSubTab === 'produk' ? (
                           <motion.div 
@@ -894,7 +894,7 @@ export default function App() {
                             initial={{ opacity: 0, scale: 0.98 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 1.02 }}
-                            className="flex-1 overflow-hidden flex flex-col"
+                            className="flex-1 overflow-visible md:overflow-hidden flex flex-col h-auto md:h-full"
                           >
                             <Dashboard products={products} categories={categories} onAddToCart={addToCart} />
                           </motion.div>
@@ -904,7 +904,7 @@ export default function App() {
                             initial={{ opacity: 0, scale: 0.98 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 1.02 }}
-                            className="flex-1 overflow-hidden flex flex-col"
+                            className="flex-1 overflow-visible md:overflow-hidden flex flex-col h-auto md:h-full"
                           >
                             <RecentTransactionsPOS 
                                transactions={transactions} 

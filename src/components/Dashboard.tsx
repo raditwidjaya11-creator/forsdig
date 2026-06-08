@@ -187,7 +187,7 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6 pb-24 md:pb-6">
+    <div className="flex-1 overflow-visible md:overflow-y-auto bg-slate-50 p-1 md:p-6 pb-24 md:pb-6">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         
         {/* Search & Filter Header - Professional Polish Theme */}
