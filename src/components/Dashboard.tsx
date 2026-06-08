@@ -32,7 +32,7 @@ const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToC
       exit={{ opacity: 0, scale: 0.9 }}
       whileTap={isOutOfStock ? {} : { scale: 0.98 }}
       onClick={handleClick}
-      className={`product-card p-2.5 sm:p-4 rounded-xl border shadow-sm flex flex-col group transition-all relative ${
+      className={`product-card p-3 md:p-4 rounded-2xl border shadow-sm flex flex-col group transition-all relative ${
         isOutOfStock
           ? 'bg-slate-50 border-slate-200 select-none cursor-not-allowed opacity-60'
           : isLowStock
@@ -40,7 +40,7 @@ const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToC
             : 'bg-white border-slate-200 hover:border-red-250 hover:shadow-md cursor-pointer active:bg-slate-50'
       }`}
     >
-      <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 mb-2 sm:mb-4 flex items-center justify-center">
+      <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 mb-2 md:mb-3.5 flex items-center justify-center">
         <img
           src={product.image}
           alt={product.name}
@@ -52,7 +52,7 @@ const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToC
         {/* Out of Stock Overlay */}
         {isOutOfStock && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-2">
-            <span className="bg-red-600 text-white text-[9px] sm:text-[11px] font-black tracking-widest px-2.5 py-1 rounded-md uppercase shadow-lg border border-red-500 whitespace-nowrap">
+            <span className="bg-red-600 text-white text-[9px] md:text-[11px] font-black tracking-widest px-2.5 py-1 rounded-md uppercase shadow-lg border border-red-500 whitespace-nowrap">
               Stok Habis
             </span>
           </div>
@@ -60,7 +60,7 @@ const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToC
 
         {/* Low Stock Indicator Badge */}
         {!isOutOfStock && isLowStock && (
-          <div className="absolute top-1 left-1 sm:top-2 sm:left-2 bg-amber-500 text-white text-[8px] sm:text-[9px] font-black px-2 py-0.5 sm:py-1 rounded-md uppercase tracking-wider shadow-md border border-amber-400 flex items-center gap-1.5 z-10 animate-pulse">
+          <div className="absolute top-1 left-1 md:top-2 md:left-2 bg-amber-500 text-white text-[8px] md:text-[9px] font-black px-2 py-0.5 md:py-1 rounded-md uppercase tracking-wider shadow-md border border-amber-400 flex items-center gap-1.5 z-10 animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-white block animate-ping"></span>
             Stok Kritis: {product.stock}
           </div>
@@ -68,40 +68,40 @@ const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToC
 
         {/* Regular Stock Badge */}
         {!isOutOfStock && !isLowStock && product.stock <= (product.minStock || 0) * 1.5 && (
-          <div className="absolute top-1 left-1 sm:top-2 sm:left-2 bg-slate-100 text-slate-700 text-[8px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
+          <div className="absolute top-1 left-1 md:top-2 md:left-2 bg-slate-100 text-slate-700 text-[8px] md:text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
             Sisa: {product.stock}
           </div>
         )}
 
         {product.sku && (
-          <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 bg-black/50 text-white text-[7px] sm:text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+          <div className="absolute bottom-1 left-1 md:bottom-2 md:left-2 bg-black/50 text-white text-[7px] md:text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
             {product.sku}
           </div>
         )}
       </div>
       
-      <div className="flex-1 flex flex-col pt-0 sm:pt-1">
-        <h3 className="text-[11px] sm:text-sm font-bold text-slate-800 line-clamp-2 leading-tight mb-1 uppercase flex items-start gap-1">
+      <div className="flex-1 flex flex-col pt-0 md:pt-0.5">
+        <h3 className="text-xs md:text-sm font-extrabold text-slate-900 line-clamp-2 leading-tight mb-1 uppercase flex items-start gap-1 tracking-tight">
           {isLowStock && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 self-center" />}
           {product.name}
         </h3>
         <div className="mt-auto">
-          <p className="text-[9px] sm:text-xs text-slate-500 mb-1.5 sm:mb-2">{product.category}</p>
+          <p className="text-[10px] md:text-xs text-slate-500 mb-1 md:mb-1.5">{product.category}</p>
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="text-red-600 font-bold text-xs sm:text-sm tracking-tight">{formatCurrency(product.price)}</span>
+              <span className="text-red-600 font-extrabold text-[13px] md:text-base tracking-tight">{formatCurrency(product.price)}</span>
               {isLowStock && (
                 <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">Min Stok: {product.minStock}</span>
               )}
             </div>
             
             {!isOutOfStock && (
-              <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all shadow-sm ${
+              <div className={`w-7 h-7 md:w-8 md:h-8 rounded-xl flex items-center justify-center transition-all shadow-sm ${
                 isLowStock 
                   ? 'bg-amber-100 text-amber-700 hover:bg-amber-600 hover:text-white' 
                   : 'bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white'
               }`}>
-                <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+                <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" />
               </div>
             )}
           </div>
@@ -191,7 +191,7 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         
         {/* Search & Filter Header - Professional Polish Theme */}
-        <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
+        <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center">
           <div className="relative flex-1 group flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400 group-focus-within:text-red-600 transition-colors" />
@@ -214,7 +214,7 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
               <span className="hidden sm:inline font-bold text-xs uppercase tracking-widest">Scan</span>
             </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 lg:pb-0 w-auto scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 xl:pb-0 w-auto scrollbar-hide">
             {['Semua', ...categories.map(c => c.name)].map((cat) => (
               <button
                 key={cat}
@@ -429,7 +429,7 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
         )}
 
         {/* Product Grid - Professional Polish Theme */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-4 md:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4 md:gap-4">
           <AnimatePresence mode="popLayout">
             {filteredProducts.map((p) => (
               <ProductCard key={p.id} product={p} onAddToCart={handleAddToCart} />

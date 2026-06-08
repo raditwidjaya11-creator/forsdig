@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { 
   Product, Category, Transaction, Supplier, Customer, 
   PurchaseOrder, DebtReceivable, PaymentQR, StoreSettings, Voucher,
-  ActivityLog, Subscription, UserProfile, Staff, Reseller, Commission
+  ActivityLog, Subscription, UserProfile, Staff, Reseller, Commission, Shift
 } from '../types';
 import { isFirebaseConfigured, auth, getCachedUserId } from '../lib/firebase';
 import { fetchData, saveData, deleteData, snakeToCamel, getActiveUserId } from './firebaseService';
@@ -25,6 +25,7 @@ interface POSState {
   staff: Staff[];
   resellers: Reseller[];
   commissions: Commission[];
+  shifts: Shift[];
   isLoading: boolean;
   
   // Actions
@@ -45,6 +46,11 @@ interface POSState {
   
   // Transactions
   addTransaction: (transaction: Transaction) => Promise<void>;
+  
+  // Shifts
+  startShift: (staffId: string, staffName: string, initialCash: number) => Promise<void>;
+  endShift: (shiftId: string, actualCash: number, notes: string) => Promise<void>;
+  updateActiveShiftCash: (cashAmount: number) => Promise<void>;
   
   // Generic sync for other entities
   syncEntity: (table: string, data: any) => Promise<void>;
@@ -101,6 +107,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
   staff: [],
   resellers: [],
   commissions: [],
+  shifts: [],
   isLoading: false,
 
   resetStore: () => {
@@ -120,6 +127,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       staff: [],
       resellers: [],
       commissions: [],
+      shifts: [],
       isLoading: false
     });
   },
@@ -157,6 +165,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
     const localStaff = loadLocal<Staff>('staff');
     const localResellers = loadLocal<Reseller>('resellers');
     const localCommissions = loadLocal<Commission>('commissions');
+    const localShifts = loadLocal<Shift>('shifts');
 
     set({
       products: localProducts,
@@ -174,6 +183,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       staff: localStaff,
       resellers: localResellers,
       commissions: localCommissions,
+      shifts: localShifts,
       isLoading: false
     });
 
@@ -196,7 +206,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
         };
 
         const [
-          p, cat, tx, cust, supp, po, d, qr, s, v, l, sub, st, res, com
+          p, cat, tx, cust, supp, po, d, qr, s, v, l, sub, st, res, com, sh
         ] = await Promise.all([
           fetchWithCatch<Product>('products'),
           fetchWithCatch<Category>('categories'),
@@ -212,7 +222,8 @@ export const usePOSStore = create<POSState>((set, get) => ({
           fetchWithCatch<Subscription>('subscriptions'),
           fetchWithCatch<Staff>('staff'),
           fetchWithCatch<Reseller>('resellers'),
-          fetchWithCatch<Commission>('commissions')
+          fetchWithCatch<Commission>('commissions'),
+          fetchWithCatch<Shift>('shifts')
         ]);
 
         const mergedSettings = s[0] || savedSettings[0] || defaultSettings;
@@ -233,6 +244,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
           staff: st.length > 0 ? st : localStaff,
           resellers: res.length > 0 ? res : localResellers,
           commissions: com.length > 0 ? com : localCommissions,
+          shifts: sh.length > 0 ? sh : localShifts,
           isLoading: false
         });
 
@@ -252,6 +264,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
         if (st.length > 0) saveLocal('staff', st);
         if (res.length > 0) saveLocal('resellers', res);
         if (com.length > 0) saveLocal('commissions', com);
+        if (sh.length > 0) saveLocal('shifts', sh);
 
       } catch (err) {
         console.error('[ForsDig POS Background] Master sync exception:', err);
@@ -354,11 +367,102 @@ export const usePOSStore = create<POSState>((set, get) => ({
     const updated = [transaction, ...transactions];
     set({ transactions: updated });
     saveLocal('transactions', updated);
+
+    // Jika metode pembayaran adalah tunai, perbarui kas shift aktif jika ada
+    if (transaction.paymentMethod === 'Tunai') {
+      get().updateActiveShiftCash(transaction.total);
+    }
+
     try {
       await saveData('transactions', transaction);
     } catch (err) {
       console.error('Failed to sync transaction:', err);
     }
+  },
+
+  startShift: async (staffId, staffName, initialCash) => {
+    const shifts = get().shifts;
+    // Tutup shift aktif lain jika ada sebelum membuka yang baru
+    const updatedShifts = shifts.map(sh => 
+      sh.status === 'active' 
+        ? { ...sh, status: 'closed' as const, endedAt: Date.now() } 
+        : sh
+    );
+
+    const newShift: Shift = {
+      id: generateUUID(),
+      staffId,
+      staffName,
+      startedAt: Date.now(),
+      initialCash,
+      totalCashTransactions: 0,
+      expectedCash: initialCash,
+      status: 'active'
+    };
+
+    const finalShifts = [newShift, ...updatedShifts];
+    set({ shifts: finalShifts });
+    saveLocal('shifts', finalShifts);
+
+    try {
+      await saveData('shifts', newShift);
+    } catch (err) {
+      console.error('Failed to sync start shift:', err);
+    }
+  },
+
+  endShift: async (shiftId, actualCash, notes) => {
+    const shifts = get().shifts;
+    const updatedShifts = shifts.map(sh => {
+      if (sh.id === shiftId) {
+        const difference = actualCash - sh.expectedCash;
+        const closedShift: Shift = {
+          ...sh,
+          actualCash,
+          difference,
+          notes,
+          endedAt: Date.now(),
+          status: 'closed' as const
+        };
+        
+        saveData('shifts', closedShift).catch(e => {
+          console.warn("Failed to sync closed shift back to database", e);
+        });
+        
+        return closedShift;
+      }
+      return sh;
+    });
+
+    set({ shifts: updatedShifts });
+    saveLocal('shifts', updatedShifts);
+  },
+
+  updateActiveShiftCash: async (cashAmount) => {
+    const shifts = get().shifts;
+    const activeShift = shifts.find(sh => sh.status === 'active');
+    if (!activeShift) return;
+
+    const updatedShifts = shifts.map(sh => {
+      if (sh.id === activeShift.id) {
+        const totalCash = sh.totalCashTransactions + cashAmount;
+        const updated: Shift = {
+          ...sh,
+          totalCashTransactions: totalCash,
+          expectedCash: sh.initialCash + totalCash
+        };
+        
+        saveData('shifts', updated).catch(e => {
+          console.warn("Failed to sync active shift cash adjustment to database/local", e);
+        });
+        
+        return updated;
+      }
+      return sh;
+    });
+
+    set({ shifts: updatedShifts });
+    saveLocal('shifts', updatedShifts);
   },
 
   syncEntity: async (table, data) => {

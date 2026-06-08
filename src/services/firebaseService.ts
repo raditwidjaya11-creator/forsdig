@@ -139,6 +139,7 @@ export type DbTable =
   | 'resellers' 
   | 'commissions' 
   | 'subscriptions' 
+  | 'shifts' 
   | 'activity_logs';
 
 export async function fetchData<T>(table: DbTable): Promise<T[]> {

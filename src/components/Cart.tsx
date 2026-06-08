@@ -1,9 +1,10 @@
 import React, { useState, memo, useMemo } from 'react';
 import { Product, Voucher, Client } from '../types';
-import { Plus, Minus, Trash2, ShoppingCart, CreditCard, Keyboard, Ticket, Tag, User, Users } from 'lucide-react';
+import { Plus, Minus, Trash2, ShoppingCart, CreditCard, Keyboard, Ticket, Tag, User, Users, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from '../lib/utils';
 import { toast } from 'sonner';
+import { usePOSStore } from '../services/posStore';
 
 interface CartProps {
   items: (Product & { quantity: number })[];
@@ -88,6 +89,9 @@ export default function Cart({
   const [showVoucher, setShowVoucher] = useState(false);
   const [tempDiscount, setTempDiscount] = useState(discount.toString());
   const [voucherCode, setVoucherCode] = useState('');
+
+  const { shifts } = usePOSStore();
+  const hasActiveShift = useMemo(() => shifts.some(s => s.status === 'active'), [shifts]);
 
   const appliedVoucher = useMemo(() => 
     appliedVoucherCode ? vouchers.find(v => v.code.toUpperCase() === appliedVoucherCode.toUpperCase()) : null
@@ -375,6 +379,18 @@ export default function Cart({
             <span className="text-red-600">{formatCurrency(total)}</span>
           </div>
         </div>
+
+        {!hasActiveShift && items.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-805 text-xs flex gap-2 items-start mt-3">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-extrabold text-amber-850">Perhatian: Shift Belum Dibuka</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                Transaksi tunai tidak akan dicatat di pencapaian laci kas kasir.
+              </p>
+            </div>
+          </div>
+        )}
 
         <button
           onClick={onCheckout}

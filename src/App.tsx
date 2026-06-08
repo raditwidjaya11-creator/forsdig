@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, useCallback } from 'react';
-import { Product, CartItem, Transaction, Category } from './types';
+import { Product, CartItem, Transaction, Category, Shift } from './types';
 import Auth from './components/Auth';
 import { Toaster, toast } from 'sonner';
 
@@ -14,6 +14,7 @@ const PromotionManager = lazy(() => import('./components/PromotionManager'));
 const VoucherReports = lazy(() => import('./components/VoucherReports'));
 const PartnerManager = lazy(() => import('./components/PartnerManager'));
 const CustomerDisplay = lazy(() => import('./components/CustomerDisplay'));
+const ShiftManager = lazy(() => import('./components/ShiftManager'));
 
 import Cart from './components/Cart';
 import PaymentModal from './components/PaymentModal';
@@ -37,7 +38,8 @@ import {
   HelpCircle,
   X,
   Truck,
-  Monitor
+  Monitor,
+  Clock
 } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { generateUUID } from './lib/utils';
@@ -63,7 +65,7 @@ export default function App() {
   // Stores
   const {
     products, categories, transactions, paymentQrs, storeSettings, vouchers,
-    suppliers, customers, purchaseOrders, debts,
+    suppliers, customers, purchaseOrders, debts, shifts,
     fetchInitialData, addTransaction, updateProduct, deleteProduct,
     addProduct, addCategory, updateCategory, deleteCategory, syncEntity, deleteEntity,
     setCategories
@@ -75,7 +77,7 @@ export default function App() {
     fetchMutations
   } = useUserStore();
 
-  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'laporan' | 'pengaturan' | 'qr' | 'promosi' | 'karyawan' | 'laporan_voucher' | 'mitra'>('kasir');
+  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'laporan' | 'pengaturan' | 'qr' | 'promosi' | 'karyawan' | 'laporan_voucher' | 'mitra' | 'shift'>('kasir');
 
   // Callback handlers for Supplier and Client Partner Manager
   const handleAddSupplier = useCallback(async (s: any) => {
@@ -497,6 +499,8 @@ export default function App() {
     const tax = discountedSubtotal * ((storeSettings?.taxRate || 11) / 100);
     const total = discountedSubtotal + tax;
 
+    const activeShift = shifts?.find(s => s.status === 'active');
+
     const newTransaction: Transaction = {
       id: generateUUID(),
       items: [...cart],
@@ -509,11 +513,11 @@ export default function App() {
       amountPaid,
       change: amountPaid - total,
       timestamp: Date.now(),
-      staffId,
+      staffId: staffId || activeShift?.staffId,
       resellerId,
       paymentDetails: {
         ...(details || {}),
-        cashierName: user?.username,
+        cashierName: user?.username || activeShift?.staffName,
         customerId: customers.find(c => c.id === selectedClientIdForCart)?.id,
         customerName: customers.find(c => c.id === selectedClientIdForCart)?.name,
         customerPhone: customers.find(c => c.id === selectedClientIdForCart)?.phone,
@@ -599,6 +603,7 @@ export default function App() {
     { id: 'kasir', label: 'Mesin Kasir', icon: ShoppingBag },
     { id: 'produk', label: 'Stok & Produk', icon: Package },
     { id: 'laporan', label: 'Riwayat Laporan', icon: BarChart3 },
+    { id: 'shift', label: 'Shift & Tutup Kasir', icon: Clock },
     { id: 'qr', label: 'Kelola QRIS', icon: Smartphone },
     { id: 'promosi', label: 'Promo & Banner', icon: Zap },
     { id: 'laporan_voucher', label: 'Laporan Voucher', icon: Ticket },
@@ -682,6 +687,7 @@ export default function App() {
                activeTab === 'laporan_voucher' ? 'Laporan Voucher' : 
                activeTab === 'promosi' ? 'Promo & Banner' : 
                activeTab === 'qr' ? 'Kelola QRIS' : 
+               activeTab === 'shift' ? 'Shift & Tutup Kasir' : 
                activeTab === 'karyawan' ? 'Manajemen Staf' : activeTab}
             </h1>
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -778,8 +784,8 @@ export default function App() {
                 className="h-full"
               >
                 {activeTab === 'kasir' && (
-                  <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 h-full items-stretch overflow-hidden">
-                    <div className="xl:col-span-3 flex flex-col h-full overflow-hidden">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 h-full items-stretch overflow-hidden">
+                    <div className="lg:col-span-2 xl:col-span-3 flex flex-col h-full overflow-hidden">
                       <AnimatePresence mode="wait">
                         {posSubTab === 'produk' ? (
                           <motion.div 
@@ -800,16 +806,16 @@ export default function App() {
                             className="flex-1 overflow-hidden flex flex-col"
                           >
                             <RecentTransactionsPOS 
-                              transactions={transactions} 
-                              onViewReceipt={(t) => setLastTransaction(t)}
-                              onViewInvoice={(t) => setSelectedInvoice(t)}
+                               transactions={transactions} 
+                               onViewReceipt={(t) => setLastTransaction(t)}
+                               onViewInvoice={(t) => setSelectedInvoice(t)}
                             />
                           </motion.div>
                         )}
                       </AnimatePresence>
                     </div>
 
-                    <div className="xl:col-span-1 h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <div className="lg:col-span-1 xl:col-span-1 h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                       <Cart 
                         items={cart} 
                         taxRate={storeSettings?.taxRate || 0}
@@ -861,6 +867,8 @@ export default function App() {
                     }}
                   />
                 )}
+
+                {activeTab === 'shift' && <ShiftManager />}
 
                 {activeTab === 'promosi' && <PromotionManager />}
                 {activeTab === 'laporan_voucher' && <VoucherReports />}

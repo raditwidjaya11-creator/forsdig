@@ -257,3 +257,19 @@ export interface Commission {
   staffName?: string;
   resellerName?: string;
 }
+
+export interface Shift {
+  id: string;
+  staffId: string;
+  staffName: string;
+  startedAt: string | number;
+  endedAt?: string | number;
+  initialCash: number;
+  totalCashTransactions: number;
+  expectedCash: number;
+  actualCash?: number;
+  difference?: number;
+  notes?: string;
+  status: 'active' | 'closed';
+}
+
