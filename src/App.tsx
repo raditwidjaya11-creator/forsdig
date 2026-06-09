@@ -502,7 +502,11 @@ export default function App() {
     const tax = discountedSubtotal * ((storeSettings?.taxRate || 11) / 100);
     const total = discountedSubtotal + tax;
 
+    const pointsRedeemedValue = details?.pointsRedeemedValue || 0;
+    const finalTotal = Math.max(0, total - pointsRedeemedValue);
+
     const activeShift = shifts?.find(s => s.status === 'active');
+    const customer = customers.find(c => c.id === selectedClientIdForCart);
 
     const newTransaction: Transaction = {
       id: generateUUID(),
@@ -510,22 +514,34 @@ export default function App() {
       subtotal,
       tax,
       discount,
-      total,
+      total: finalTotal,
       paymentMethod: method as any,
       status,
       amountPaid,
-      change: amountPaid - total,
+      change: amountPaid - finalTotal,
       timestamp: Date.now(),
       staffId: staffId || activeShift?.staffId,
       resellerId,
       paymentDetails: {
         ...(details || {}),
         cashierName: user?.username || activeShift?.staffName,
-        customerId: customers.find(c => c.id === selectedClientIdForCart)?.id,
-        customerName: customers.find(c => c.id === selectedClientIdForCart)?.name,
-        customerPhone: customers.find(c => c.id === selectedClientIdForCart)?.phone,
+        customerId: customer?.id,
+        customerName: customer?.name,
+        customerPhone: customer?.phone,
       }
     };
+
+    if (customer) {
+      const pointsRedeemed = details?.pointsRedeemed || 0;
+      const pointsEarned = details?.pointsEarned || 0;
+      const finalPoints = Math.max(0, (customer.points || 0) - pointsRedeemed + pointsEarned);
+
+      // Persist the updated points to the customer record
+      await syncEntity('customers', {
+        ...customer,
+        points: finalPoints
+      });
+    }
 
     await addTransaction(newTransaction);
     setSelectedClientIdForCart(null);
@@ -1258,6 +1274,8 @@ export default function App() {
             storeSettings={storeSettings}
             onClose={() => setShowPayment(false)}
             onSuccess={handlePaymentSuccess}
+            selectedClientId={selectedClientIdForCart}
+            clients={customers}
           />
         )}
         

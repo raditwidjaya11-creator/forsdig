@@ -130,6 +130,9 @@ export interface Transaction {
     customerId?: string;
     customerName?: string;
     customerPhone?: string;
+    pointsEarned?: number;
+    pointsRedeemed?: number;
+    pointsRedeemedValue?: number;
   };
 }
 
@@ -148,6 +151,7 @@ export interface Client {
   phone: string;
   email: string;
   address: string;
+  points?: number;
 }
 
 export type Customer = Client;

@@ -6,11 +6,16 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('id-ID', {
+  const formatted = new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
   }).format(amount);
+  
+  // Replace non-breaking spaces (e.g., \u00A0, \u202F) or bidi marks (\u200E, \u200F) with ordinary ASCII spaces
+  return formatted
+    .replace(/[\u00A0\u202F\u200F\u200E]/g, ' ')
+    .trim();
 }
 
 export function generateUUID() {

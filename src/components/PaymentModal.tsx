@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, CreditCard, Banknote, QrCode, Wallet, CheckCircle2, ScanLine, ArrowLeftRight, ChevronRight, Check, Activity, Users, Globe } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import confetti from 'canvas-confetti';
-import { CartItem, PaymentQR, Staff, Reseller } from '../types';
+import { CartItem, PaymentQR, Staff, Reseller, Client } from '../types';
 import { useStaffResellerStore } from '../services/staffResellerStore';
 
 interface PaymentModalProps {
@@ -15,9 +15,22 @@ interface PaymentModalProps {
   storeSettings: any;
   onClose: () => void;
   onSuccess: (method: string, amountPaid: number, details?: any, status?: 'success' | 'pending', staffId?: string, resellerId?: string) => void;
+  selectedClientId?: string | null;
+  clients?: Client[];
 }
 
-export default function PaymentModal({ total, subtotal, discount, items, paymentQrs, storeSettings, onClose, onSuccess }: PaymentModalProps) {
+export default function PaymentModal({ 
+  total, 
+  subtotal, 
+  discount, 
+  items, 
+  paymentQrs, 
+  storeSettings, 
+  onClose, 
+  onSuccess,
+  selectedClientId = null,
+  clients = []
+}: PaymentModalProps) {
   const staffs = useStaffResellerStore(state => state.staffs);
   const resellers = useStaffResellerStore(state => state.resellers);
   const [method, setMethod] = useState<'Tunai' | 'QRIS' | 'E-wallet' | 'Transfer' | 'Kartu' | 'Lainnya'>('Tunai');
@@ -34,6 +47,23 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
   const [selectedResellerId, setSelectedResellerId] = useState<string | undefined>();
   const [activeRightTab, setActiveRightTab] = useState<'pembayaran' | 'komisi'>('pembayaran');
 
+  // Customer Loyalty Points States/Computations
+  const [pointsRedeemed, setPointsRedeemed] = useState<number>(0);
+
+  const selectedClient = useMemo(() => {
+    if (!selectedClientId || !clients) return null;
+    return clients.find(c => c.id === selectedClientId) || null;
+  }, [selectedClientId, clients]);
+
+  const maxRedeemablePoints = useMemo(() => {
+    if (!selectedClient) return 0;
+    const clientPoints = selectedClient.points || 0;
+    return Math.min(clientPoints, Math.ceil(total / 100)); // 1 Poin = Rp 100
+  }, [selectedClient, total]);
+
+  const pointsRedeemedValue = pointsRedeemed * 100;
+  const finalTotal = Math.max(0, total - pointsRedeemedValue);
+
   useEffect(() => {
     if (!storeSettings) return;
     
@@ -49,7 +79,7 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
     } else {
       channel.postMessage({
         type: 'payment',
-        total: total,
+        total: finalTotal,
         items: items,
         qrUrl: selectedQR?.imageUrl,
         qrName: selectedQR?.name,
@@ -58,7 +88,7 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
       });
     }
     return () => channel.close();
-  }, [method, selectedQR, total, isSuccess, storeSettings]);
+  }, [method, selectedQR, finalTotal, isSuccess, storeSettings]);
 
   useEffect(() => {
     let timeout: any;
@@ -89,8 +119,8 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
     else if (paymentQrs.length > 0) setSelectedQR(paymentQrs.find(q => q.isActive) || null);
   }, [paymentQrs]);
 
-  const change = Math.max(0, (Number(amountPaid) || 0) - total);
-  const isPayable = method === 'Tunai' ? Number(amountPaid) >= total : true;
+  const change = Math.max(0, (Number(amountPaid) || 0) - finalTotal);
+  const isPayable = method === 'Tunai' ? Number(amountPaid) >= finalTotal : true;
 
   const handleNumpad = (value: string) => {
     if (value === 'C') {
@@ -110,9 +140,9 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
     const list = new Set<number>();
     const standardNotes = [2000, 5000, 10000, 20000, 50000, 100000];
     
-    // Add standard single note values if higher than total
+    // Add standard single note values if higher than finalTotal
     standardNotes.forEach(note => {
-      if (note > total) {
+      if (note > finalTotal) {
         list.add(note);
       }
     });
@@ -120,18 +150,18 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
     // Add round ups of common intervals
     const roundups = [5000, 10000, 20000, 50000, 100000];
     roundups.forEach(interval => {
-      const rounded = Math.ceil(total / interval) * interval;
-      if (rounded > total) {
+      const rounded = Math.ceil(finalTotal / interval) * interval;
+      if (rounded > finalTotal) {
         list.add(rounded);
       }
     });
 
-    // Sort ascending, remove duplicates, filter out values <= total, and select top 3
+    // Sort ascending, remove duplicates, filter out values <= finalTotal, and select top 3
     return Array.from(list)
-      .filter(val => val > total)
+      .filter(val => val > finalTotal)
       .sort((a, b) => a - b)
       .slice(0, 3);
-  }, [total]);
+  }, [finalTotal]);
 
   useEffect(() => {
     let interval: any;
@@ -164,21 +194,28 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
       origin: { y: 0.6 }
     });
 
-    const paymentDetails = (['QRIS', 'Transfer', 'E-wallet'].includes(method)) ? {
+    const baseDetails = (['QRIS', 'Transfer', 'E-wallet'].includes(method)) ? {
       qrId: selectedQR?.id,
       qrName: selectedQR?.name,
       qrProvider: selectedQR?.provider,
       paymentTime: Date.now(),
       walletProvider: method === 'E-wallet' ? selectedQR?.provider : undefined,
       bankName: method === 'Transfer' ? selectedQR?.provider : undefined
-    } : undefined;
+    } : {};
+
+    const paymentDetails = {
+      ...baseDetails,
+      pointsRedeemed: pointsRedeemed,
+      pointsRedeemedValue: pointsRedeemedValue,
+      pointsEarned: Math.floor(finalTotal / 10000) * 10
+    };
 
     const status = paymentMode === 'Semi-Otomatik' ? 'pending' : 'success';
 
     setTimeout(() => {
       onSuccess(
         method, 
-        Number(method === 'Tunai' ? amountPaid : total), 
+        Number(method === 'Tunai' ? amountPaid : finalTotal), 
         paymentDetails, 
         status,
         selectedStaffId,
@@ -281,9 +318,59 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
                     )}
                     <div className="pt-2 border-t border-slate-100">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Tagihan</p>
-                      <p className="text-2xl font-black text-red-600">{formatCurrency(total)}</p>
+                      {pointsRedeemedValue > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-slate-400 line-through">{formatCurrency(total)}</p>
+                          <p className="text-xs font-extrabold text-amber-600">Diskon Poin: -{formatCurrency(pointsRedeemedValue)}</p>
+                          <p className="text-2xl font-black text-red-600">{formatCurrency(finalTotal)}</p>
+                        </div>
+                      ) : (
+                        <p className="text-2xl font-black text-red-600">{formatCurrency(total)}</p>
+                      )}
                     </div>
                   </div>
+
+                  {selectedClient && (
+                    <div className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200 shadow-sm space-y-3">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-1.5 text-amber-800">
+                          <Users size={16} className="text-amber-600 animate-pulse" />
+                          <span className="text-[10px] font-black uppercase tracking-widest">Loyalty: {selectedClient.name}</span>
+                        </div>
+                        <span className="text-xs font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">{selectedClient.points || 0} Poin</span>
+                      </div>
+
+                      {maxRedeemablePoints > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center text-xs text-amber-800 font-bold">
+                            <span>Tukarkan Poin:</span>
+                            <span>{pointsRedeemed} Poin (-{formatCurrency(pointsRedeemedValue)})</span>
+                          </div>
+                          
+                          <input 
+                            type="range"
+                            min="0"
+                            max={maxRedeemablePoints}
+                            value={pointsRedeemed}
+                            onChange={(e) => setPointsRedeemed(Number(e.target.value))}
+                            className="w-full h-1.5 bg-amber-200 rounded-lg appearance-none cursor-pointer accent-amber-600 focus:outline-none"
+                          />
+                          
+                          <div className="flex justify-between text-[9px] text-amber-600/80 font-bold">
+                            <span>0 Poin</span>
+                            <span>Maks: {maxRedeemablePoints} Poin</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-amber-700 font-bold">Pelanggan belum memiliki saldo poin untuk ditukarkan.</p>
+                      )}
+                      
+                      <div className="pt-2 border-t border-amber-200/50 flex justify-between items-center text-[10px] text-amber-800 font-bold">
+                        <span>Poin didapat transaksi ini:</span>
+                        <span className="text-emerald-700 font-extrabold">+{Math.floor(finalTotal / 10000) * 10} Poin</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-3">
                     {methods.map((m) => {
@@ -452,10 +539,10 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
                         <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 flex-1">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest col-span-2 lg:col-span-1">Uang Cepat</p>
                           <button 
-                            onClick={() => handleQuickCash(total)} 
+                            onClick={() => handleQuickCash(finalTotal)} 
                             className="py-3 bg-red-50 text-red-700 rounded-xl font-bold text-xs sm:text-sm border border-red-100 hover:bg-red-100 transition-all active:scale-95"
                           >
-                            Pas ({formatCurrency(total)})
+                            Pas ({formatCurrency(finalTotal)})
                           </button>
                           {cashSuggestions.map((amount) => (
                             <button 
@@ -500,7 +587,7 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
                               </div>
                               <div className="text-left">
                                 <p className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">Berhasil!</p>
-                                <p className="text-sm font-black whitespace-nowrap uppercase tracking-tight">Pembayaran {formatCurrency(total)} Terdeteksi</p>
+                                <p className="text-sm font-black whitespace-nowrap uppercase tracking-tight">Pembayaran {formatCurrency(finalTotal)} Terdeteksi</p>
                               </div>
                             </motion.div>
                           )}
@@ -544,7 +631,7 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
                                </div>
                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                                   {method === 'Kartu' ? 'Gunakan EDC untuk memproses kartu' : 'Pembayaran lainnya'}
-                               </p>
+                                </p>
                             </div>
                           )}
                           
@@ -553,7 +640,7 @@ export default function PaymentModal({ total, subtotal, discount, items, payment
                              <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">
                                {['QRIS', 'Transfer', 'E-wallet'].includes(method) ? (selectedQR?.name || 'PILIH METODE QR') : method}
                              </p>
-                             <p className="text-red-500 font-black text-xl tracking-tight">{formatCurrency(total)}</p>
+                             <p className="text-red-500 font-black text-xl tracking-tight">{formatCurrency(finalTotal)}</p>
                           </div>
                        </div>
 

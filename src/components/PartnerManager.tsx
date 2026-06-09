@@ -131,6 +131,7 @@ export default function PartnerManager({
     phone: '',
     email: '',
     address: '',
+    points: 0,
     supplierId: '',
     items: [] as { productId: string; quantity: number; costPrice: number }[],
     paymentStatus: 'Lunas' as 'Lunas' | 'Hutang'
@@ -162,6 +163,7 @@ export default function PartnerManager({
       phone: '',
       email: '',
       address: '',
+      points: 0,
       supplierId: '',
       items: [],
       paymentStatus: 'Lunas'
@@ -202,7 +204,8 @@ export default function PartnerManager({
           name: formData.name,
           phone: formData.phone,
           email: formData.email,
-          address: formData.address
+          address: formData.address,
+          points: Number(formData.points || 0)
         });
       } else {
         onAddClient({
@@ -210,7 +213,8 @@ export default function PartnerManager({
           name: formData.name,
           phone: formData.phone,
           email: formData.email,
-          address: formData.address
+          address: formData.address,
+          points: Number(formData.points || 0)
         });
       }
     } else if (activeSubTab === 'purchases') {
@@ -238,6 +242,7 @@ export default function PartnerManager({
       phone: item.phone || '',
       email: item.email || '',
       address: item.address || '',
+      points: item.points || 0,
       supplierId: '',
       items: [],
       paymentStatus: 'Lunas'
@@ -452,7 +457,13 @@ export default function PartnerManager({
                 <ChevronRight size={20} />
               </button>
             </div>
-            <h3 className="font-bold text-slate-800 text-lg mb-1">{c.name}</h3>
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <h3 className="font-bold text-slate-800 text-lg truncate">{c.name}</h3>
+              <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shrink-0">
+                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                {c.points || 0} Poin
+              </div>
+            </div>
             
             <div className="space-y-2 mt-4">
               <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -1680,6 +1691,20 @@ export default function PartnerManager({
                           className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold min-h-[100px]"
                         />
                       </div>
+                      
+                      {activeSubTab === 'clients' && (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Poin Pelanggan</label>
+                          <input 
+                            type="number"
+                            min="0"
+                            value={formData.points}
+                            onChange={(e) => setFormData({...formData, points: Number(e.target.value) || 0})}
+                            placeholder="0"
+                            className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold"
+                          />
+                        </div>
+                      )}
                     </>
                   )}
                   

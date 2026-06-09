@@ -169,7 +169,13 @@ Kembalian:  ${formatCurrency(transaction.change)}
                      '302px' 
             }}
           >
-            <div className="flex-1 p-5 md:p-6 pb-2 print:p-0 print:overflow-visible font-mono">
+            <div 
+              className={`flex-1 pb-2 print:p-0 print:overflow-visible font-mono ${
+                paperSize === '48' ? 'p-2 text-[10px]' :
+                paperSize === '58' ? 'p-3 text-[10.5px]' :
+                'p-5 md:p-6 text-[11.5px]'
+              }`}
+            >
           <div className="text-center space-y-1 mb-4 sm:mb-6">
             {storeSettings?.logo && (
               <div className="flex justify-center mb-3">
@@ -202,21 +208,21 @@ Kembalian:  ${formatCurrency(transaction.change)}
             </div>
           </div>
 
-          <div className="space-y-3 text-[11px] mb-4 sm:mb-6 text-slate-900">
+          <div className="space-y-3 mb-4 sm:mb-6 text-slate-900">
             {transaction.items.map((item) => (
-              <div key={item.id} className="flex justify-between gap-2 items-start">
-                <div className="flex-1">
-                  <div className="font-bold uppercase leading-tight line-clamp-2">{item.name}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">
+              <div key={item.id} className="flex justify-between gap-1 items-start">
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold uppercase leading-tight line-clamp-2 break-words">{item.name}</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5 whitespace-nowrap">
                     {item.quantity} x {formatCurrency(item.price)}
                   </div>
                 </div>
-                <div className="font-black whitespace-nowrap pt-0.5">{formatCurrency(item.price * item.quantity)}</div>
+                <div className="font-black whitespace-nowrap pt-0.5 pl-1">{formatCurrency(item.price * item.quantity)}</div>
               </div>
             ))}
           </div>
 
-          <div className="border-t border-dashed border-slate-200 pt-3 space-y-1.5 text-[11px]">
+          <div className="border-t border-dashed border-slate-200 pt-3 space-y-1.5">
             <div className="flex justify-between text-slate-600 font-bold">
               <span>SUBTOTAL</span>
               <span>{formatCurrency(transaction.subtotal)}</span>
@@ -231,13 +237,15 @@ Kembalian:  ${formatCurrency(transaction.change)}
               <span>PAJAK ({storeSettings?.taxRate || 0}%)</span>
               <span>{formatCurrency(transaction.tax)}</span>
             </div>
-            <div className="flex justify-between font-black text-xs pt-3 border-t border-slate-900 text-slate-900">
+            <div className={`flex justify-between font-black pt-3 border-t border-slate-900 text-slate-900 ${
+              paperSize === '48' ? 'text-[11px]' : 'text-xs'
+            }`}>
               <span className="uppercase tracking-widest">TOTAL</span>
               <span>{formatCurrency(transaction.total)}</span>
             </div>
           </div>
 
-          <div className="mt-4 space-y-1.5 text-[10px] uppercase pt-3 border-t border-dashed border-slate-200">
+          <div className="mt-4 space-y-1.5 uppercase pt-3 border-t border-dashed border-slate-200">
             <div className="flex justify-between text-slate-900 font-black">
               <span>BAYAR {transaction.paymentMethod}</span>
               <span>{formatCurrency(transaction.amountPaid)}</span>
@@ -254,6 +262,26 @@ Kembalian:  ${formatCurrency(transaction.change)}
                 <span>{formatCurrency(transaction.change)}</span>
               </div>
             )}
+            
+            {(transaction.paymentDetails?.pointsRedeemed || transaction.paymentDetails?.pointsEarned) ? (
+              <div className={`mt-3 pt-3 border-t border-dashed border-slate-200 text-slate-800 space-y-1 bg-amber-50/40 rounded-xl border border-amber-100 normal-case ${
+                paperSize === '48' ? 'p-1.5 text-[9px]' : 'p-2.5 text-[10px]'
+              }`}>
+                <p className="font-extrabold text-[9px] text-amber-800 tracking-wider uppercase mb-1">LOYALTY POINTS</p>
+                {transaction.paymentDetails.pointsRedeemed ? (
+                  <div className="flex justify-between items-center gap-1 text-slate-600 font-bold flex-wrap">
+                    <span>Poin Ditukar</span>
+                    <span className="text-amber-700 font-extrabold text-right">-{transaction.paymentDetails.pointsRedeemed} Poin (-{formatCurrency(transaction.paymentDetails.pointsRedeemedValue || 0)})</span>
+                  </div>
+                ) : null}
+                {transaction.paymentDetails.pointsEarned ? (
+                  <div className="flex justify-between items-center gap-1 text-slate-600 font-bold flex-wrap">
+                    <span>Poin Didapat</span>
+                    <span className="text-emerald-700 font-extrabold text-right">+{transaction.paymentDetails.pointsEarned} Poin</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-6 text-center py-4 border-t border-slate-100">

@@ -1,6 +1,20 @@
 import { Transaction, StoreSettings, Product } from '../types';
 import { format } from 'date-fns';
 
+const cleanASCII = (text: string): string => {
+  if (!text) return '';
+  return text
+    .normalize('NFD') // decompose accents
+    .replace(/[\u0300-\u036f]/g, '') // remove accent marks
+    .replace(/[\u2018\u2019]/g, "'") // smart single quotes
+    .replace(/[\u201C\u201D]/g, '"') // smart double quotes
+    .replace(/[\u2013\u2014]/g, '-') // em/en dashes
+    .replace(/[\u00A0\u202F\u200F\u200E]/g, ' ') // non-breaking spaces & bidi marks to simple spaces
+    .replace(/[^\x20-\x7E\x0A\x0D]/g, ' ') // fallback: any remaining non-ASCII printable chars to spaces
+    .replace(/\s+/g, ' ') // collapse multiple spaces
+    .trim();
+};
+
 export class BluetoothPrinterService {
   private device: BluetoothDevice | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
@@ -138,8 +152,8 @@ export class BluetoothPrinterService {
     for (const product of products) {
       for (let i = 0; i < quantity; i++) {
         const sku = product.sku || product.id.slice(-8);
-        const formattedPrice = `Rp ${new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0 }).format(product.price).replace(/[^\x00-\x7F]/g, "")}`;
-        data += center + product.name.toUpperCase().substring(0, maxChars) + feed;
+        const formattedPrice = `Rp ${new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0 }).format(product.price).replace(/[^\x00-\x7F]/g, "").replace(/\s+/g, "")}`;
+        data += center + cleanASCII(product.name).toUpperCase().substring(0, maxChars) + feed;
         data += barcodeHeight + barcodeWidth + barcodeTextPos;
         data += `\x1D\x6B\x04${sku}\x00`; 
         data += feed + formattedPrice + feed + feed;
@@ -180,7 +194,7 @@ export class BluetoothPrinterService {
       const formatted = new Intl.NumberFormat('id-ID', {
         minimumFractionDigits: 0
       }).format(num);
-      const cleanFormatted = formatted.replace(/[^\x00-\x7F]/g, "");
+      const cleanFormatted = formatted.replace(/[^\x00-\x7F]/g, "").replace(/\s+/g, "");
       return `Rp ${cleanFormatted}`;
     };
 
@@ -192,8 +206,8 @@ export class BluetoothPrinterService {
     const leftAlign = '\x1B\x61\x00';
 
     const justifyText = (leftText: string, rightText: string) => {
-      const cleanLeft = leftText.replace(/[^\x00-\x7F]/g, " ");
-      const cleanRight = rightText.replace(/[^\x00-\x7F]/g, " ");
+      const cleanLeft = cleanASCII(leftText);
+      const cleanRight = cleanASCII(rightText);
       const spacesNeeded = maxChars - (cleanLeft.length + cleanRight.length);
       if (spacesNeeded > 0) {
         return cleanLeft + ' '.repeat(spacesNeeded) + cleanRight;
@@ -202,7 +216,7 @@ export class BluetoothPrinterService {
     };
 
     const centerText = (text: string) => {
-      const clean = text.replace(/[^\x00-\x7F]/g, " ");
+      const clean = cleanASCII(text);
       const spaces = Math.max(0, Math.floor((maxChars - clean.length) / 2));
       return ' '.repeat(spaces) + clean;
     };
@@ -210,7 +224,7 @@ export class BluetoothPrinterService {
     let data = init;
 
     // Header section
-    data += centerAlign + boldOn + settings.name.toUpperCase().substring(0, maxChars) + feed + boldOff;
+    data += centerAlign + boldOn + cleanASCII(settings.name).toUpperCase().substring(0, maxChars) + feed + boldOff;
     if (settings.address) {
       data += centerText(settings.address) + feed;
     }
@@ -231,7 +245,7 @@ export class BluetoothPrinterService {
 
     // Items list
     transaction.items.forEach(item => {
-      data += item.name.toUpperCase() + feed;
+      data += cleanASCII(item.name).toUpperCase().substring(0, maxChars) + feed;
       const qtyPrice = `${item.quantity} x ${safeFormat(item.price)}`;
       const sub = safeFormat(item.price * item.quantity);
       data += justifyText('  ' + qtyPrice, sub) + feed;
@@ -262,6 +276,19 @@ export class BluetoothPrinterService {
     data += justifyText(methodStr, safeFormat(transaction.amountPaid)) + feed;
     data += justifyText('KEMBALI', safeFormat(transaction.change)) + feed;
     data += '-'.repeat(maxChars) + feed;
+
+    // Loyalty Points information
+    if (transaction.paymentDetails?.pointsRedeemed || transaction.paymentDetails?.pointsEarned) {
+      data += centerText('LOYALTY POINTS') + feed;
+      if (transaction.paymentDetails.pointsRedeemed) {
+        data += justifyText('  POIN DITUKAR', `${transaction.paymentDetails.pointsRedeemed} P`) + feed;
+        data += justifyText('  NILAI DISKON', safeFormat(transaction.paymentDetails.pointsRedeemedValue || 0)) + feed;
+      }
+      if (transaction.paymentDetails.pointsEarned) {
+        data += justifyText('  POIN DIDAPAT', `+${transaction.paymentDetails.pointsEarned} P`) + feed;
+      }
+      data += '-'.repeat(maxChars) + feed;
+    }
 
     // Footer section
     data += centerAlign;
