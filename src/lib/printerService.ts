@@ -1,13 +1,20 @@
 import { Transaction, StoreSettings, Product } from '../types';
-import { formatCurrency } from './utils';
 import { format } from 'date-fns';
 
 export class BluetoothPrinterService {
   private device: BluetoothDevice | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
 
-  async connect(settings: StoreSettings) {
+  isConnected(): boolean {
+    return !!(this.device && this.device.gatt && this.device.gatt.connected && this.characteristic);
+  }
+
+  async connect(settings: StoreSettings): Promise<boolean> {
     try {
+      if (this.isConnected()) {
+        return true;
+      }
+
       // Common Thermal Printer Service UUIDs
       const commonServices = [
         '000018f0-0000-1000-8000-00805f9b34fb', // Generic POS
@@ -89,8 +96,24 @@ export class BluetoothPrinterService {
     }
   }
 
+  private async writeToCharacteristic(chunk: Uint8Array) {
+    if (!this.characteristic) return;
+    try {
+      if ('writeValueWithoutResponse' in this.characteristic && this.characteristic.properties.writeWithoutResponse) {
+        await this.characteristic.writeValueWithoutResponse(chunk);
+      } else if ('writeValueWithResponse' in this.characteristic && this.characteristic.properties.write) {
+        await this.characteristic.writeValueWithResponse(chunk);
+      } else {
+        await this.characteristic.writeValue(chunk);
+      }
+    } catch (e) {
+      // Fallback if specific methods are unsupported or fail
+      await this.characteristic.writeValue(chunk);
+    }
+  }
+
   async printBarcodes(products: Product[], quantity: number, settings: StoreSettings, paperSize: '48' | '58' | '80' = '58') {
-    if (!this.characteristic) {
+    if (!this.isConnected()) {
       const connected = await this.connect(settings);
       if (!connected) throw new Error('Could not connect to printer');
     }
@@ -115,26 +138,23 @@ export class BluetoothPrinterService {
     for (const product of products) {
       for (let i = 0; i < quantity; i++) {
         const sku = product.sku || product.id.slice(-8);
+        const formattedPrice = `Rp ${new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0 }).format(product.price).replace(/[^\x00-\x7F]/g, "")}`;
         data += center + product.name.toUpperCase().substring(0, maxChars) + feed;
         data += barcodeHeight + barcodeWidth + barcodeTextPos;
-        // ESC/POS GS k m n d1...dn (m=73 is CODE128)
-        // For CODE128, data must start with {code set select string}
-        // Simplified version: use type 4 for CODE39 or similar if 128 is complex
-        // Most thermal printers support type 2 (CODE39) readily
         data += `\x1D\x6B\x04${sku}\x00`; 
-        data += feed + `RP ${product.price.toLocaleString('id-ID')}` + feed + feed;
+        data += feed + formattedPrice + feed + feed;
         data += '-'.repeat(maxChars) + feed + feed;
       }
     }
 
-    data += feed + feed + feed + cut;
+    data += feed + feed + feed + feed + cut;
 
     const encodedData = encoder.encode(data);
     const chunkSize = 100;
     for (let i = 0; i < encodedData.length; i += chunkSize) {
       const chunk = encodedData.slice(i, i + chunkSize);
       try {
-        await this.characteristic!.writeValue(chunk);
+        await this.writeToCharacteristic(chunk);
         await new Promise(resolve => setTimeout(resolve, 50));
       } catch (err) {
         console.error('Print barcode chunk error:', err);
@@ -144,76 +164,132 @@ export class BluetoothPrinterService {
   }
 
   async printReceipt(transaction: Transaction, settings: StoreSettings, paperSize: '48' | '58' | '80' = '58') {
-    if (!this.characteristic) {
+    if (!this.isConnected()) {
       const connected = await this.connect(settings);
       if (!connected) throw new Error('Could not connect to printer');
     }
 
-    const encoder = new TextEncoder();
-    
-    // Config based on paper size
-    const widthMap = {
+    const maxChars = {
       '48': 24,
       '58': 32,
       '80': 48
-    };
-    const maxChars = widthMap[paperSize];
-    const itemWidth = Math.floor(maxChars * 0.6);
-    const priceWidth = maxChars - itemWidth;
+    }[paperSize] || 32;
 
-    // ESC/POS Commands
+    const safeFormat = (val: number) => {
+      const num = Math.round(val);
+      const formatted = new Intl.NumberFormat('id-ID', {
+        minimumFractionDigits: 0
+      }).format(num);
+      const cleanFormatted = formatted.replace(/[^\x00-\x7F]/g, "");
+      return `Rp ${cleanFormatted}`;
+    };
+
+    const feed = '\x0A';
     const init = '\x1B\x40';
-    const center = '\x1B\x61\x01';
-    const left = '\x1B\x61\x00';
     const boldOn = '\x1B\x45\x01';
     const boldOff = '\x1B\x45\x00';
-    const feed = '\x0A';
-    const cut = '\x1D\x56\x00';
+    const centerAlign = '\x1B\x61\x01';
+    const leftAlign = '\x1B\x61\x00';
 
-    let data = '';
-    data += init;
-    data += center + boldOn + settings.name.toUpperCase() + feed + boldOff;
-    data += settings.address + feed;
-    data += 'Tlp: ' + settings.phone + feed;
-    data += '-'.repeat(maxChars) + feed;
-    data += left;
-    data += 'No  : ' + transaction.id.slice(-8) + feed;
-    data += 'Tgl : ' + format(transaction.timestamp, 'dd/MM/yy HH:mm') + feed;
-    data += 'Kasir: ' + (transaction.paymentDetails?.cashierName || 'Admin') + feed;
-    data += '-'.repeat(maxChars) + feed;
-
-    transaction.items.forEach(item => {
-      // Split name if too long
-      const name = item.name.toUpperCase();
-      if (name.length > maxChars) {
-        data += name.substring(0, maxChars) + feed;
-        data += `  ${item.quantity} x ${formatCurrency(item.price)}`.padEnd(itemWidth) + 
-                formatCurrency(item.price * item.quantity).padStart(priceWidth) + feed;
-      } else {
-        data += name.padEnd(maxChars) + feed;
-        data += `  ${item.quantity} x ${formatCurrency(item.price)}`.padEnd(itemWidth) + 
-                formatCurrency(item.price * item.quantity).padStart(priceWidth) + feed;
+    const justifyText = (leftText: string, rightText: string) => {
+      const cleanLeft = leftText.replace(/[^\x00-\x7F]/g, " ");
+      const cleanRight = rightText.replace(/[^\x00-\x7F]/g, " ");
+      const spacesNeeded = maxChars - (cleanLeft.length + cleanRight.length);
+      if (spacesNeeded > 0) {
+        return cleanLeft + ' '.repeat(spacesNeeded) + cleanRight;
       }
+      return cleanLeft + feed + ' '.repeat(Math.max(0, maxChars - cleanRight.length)) + cleanRight;
+    };
+
+    const centerText = (text: string) => {
+      const clean = text.replace(/[^\x00-\x7F]/g, " ");
+      const spaces = Math.max(0, Math.floor((maxChars - clean.length) / 2));
+      return ' '.repeat(spaces) + clean;
+    };
+
+    let data = init;
+
+    // Header section
+    data += centerAlign + boldOn + settings.name.toUpperCase().substring(0, maxChars) + feed + boldOff;
+    if (settings.address) {
+      data += centerText(settings.address) + feed;
+    }
+    if (settings.phone) {
+      data += centerText('Tlp: ' + settings.phone) + feed;
+    }
+    data += leftAlign + '-'.repeat(maxChars) + feed;
+
+    // Metadata section
+    data += justifyText('No   :', (transaction.id || '').slice(-8).toUpperCase()) + feed;
+    data += justifyText('Tgl  :', format(new Date(transaction.timestamp), 'dd/MM/yy HH:mm')) + feed;
+    data += justifyText('Kasir:', (transaction.paymentDetails?.cashierName || 'Admin').substring(0, 15)) + feed;
+    
+    if (transaction.paymentDetails?.customerName) {
+      data += justifyText('Plg  :', transaction.paymentDetails.customerName.substring(0, 15)) + feed;
+    }
+    data += '-'.repeat(maxChars) + feed;
+
+    // Items list
+    transaction.items.forEach(item => {
+      data += item.name.toUpperCase() + feed;
+      const qtyPrice = `${item.quantity} x ${safeFormat(item.price)}`;
+      const sub = safeFormat(item.price * item.quantity);
+      data += justifyText('  ' + qtyPrice, sub) + feed;
     });
-
     data += '-'.repeat(maxChars) + feed;
-    data += `SUBTOTAL:`.padEnd(itemWidth) + formatCurrency(transaction.subtotal).padStart(priceWidth) + feed;
-    data += `PAJAK (${settings.taxRate}%):`.padEnd(itemWidth) + formatCurrency(transaction.tax).padStart(priceWidth) + feed;
-    data += boldOn + `TOTAL:`.padEnd(itemWidth) + formatCurrency(transaction.total).padStart(priceWidth) + boldOff + feed;
-    data += '-'.repeat(maxChars) + feed;
-    data += `BAYARvia${transaction.paymentMethod}:`.padEnd(itemWidth) + formatCurrency(transaction.amountPaid).padStart(priceWidth) + feed;
-    data += `KEMBALI:`.padEnd(itemWidth) + formatCurrency(transaction.change).padStart(priceWidth) + feed;
-    data += feed + center + settings.footerMessage + feed + feed + feed + cut;
 
-    // Send data in chunks (some printers have small buffers)
+    // Financial calculations
+    data += justifyText('SUBTOTAL', safeFormat(transaction.subtotal)) + feed;
+    
+    if (transaction.tax > 0) {
+      const taxRate = settings.taxRate || 0;
+      data += justifyText(`PAJAK (${taxRate}%)`, safeFormat(transaction.tax)) + feed;
+    }
+    
+    if (transaction.discount && transaction.discount > 0) {
+      data += justifyText('DISKON', '-' + safeFormat(transaction.discount)) + feed;
+    }
+
+    if (transaction.adminFee && transaction.adminFee > 0) {
+      data += justifyText('ADMIN FEE', safeFormat(transaction.adminFee)) + feed;
+    }
+
+    data += boldOn + justifyText('TOTAL', safeFormat(transaction.total)) + boldOff + feed;
+    data += '-'.repeat(maxChars) + feed;
+
+    // Payment & Change details
+    const methodStr = `BAYAR (${transaction.paymentMethod})`;
+    data += justifyText(methodStr, safeFormat(transaction.amountPaid)) + feed;
+    data += justifyText('KEMBALI', safeFormat(transaction.change)) + feed;
+    data += '-'.repeat(maxChars) + feed;
+
+    // Footer section
+    data += centerAlign;
+    if (settings.footerMessage) {
+      settings.footerMessage.split('\n').forEach(line => {
+        data += centerText(line) + feed;
+      });
+    } else {
+      data += centerText('TERIMA KASIH') + feed;
+      data += centerText('SILAHKAN DATANG KEMBALI') + feed;
+    }
+
+    // Crucial: Feed paper before cutting so that cheap printers don't slash the text!
+    data += feed + feed + feed + feed + feed;
+    
+    // ESC/POS select cut (GS V B 00)
+    data += '\x1D\x56\x42\x00';
+
+    const encoder = new TextEncoder();
     const encodedData = encoder.encode(data);
-    const chunkSize = 100; // Increased chunk size for efficiency
+    const chunkSize = 128; // Optimized chunk sizes for thermal printer bluetooth chips
+
     for (let i = 0; i < encodedData.length; i += chunkSize) {
       const chunk = encodedData.slice(i, i + chunkSize);
       try {
-        await this.characteristic!.writeValue(chunk);
-        // Small delay to prevent overwhelming the printer buffer
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await this.writeToCharacteristic(chunk);
+        // Small delay to allow slow serial bluetooth buffers to keep pace
+        await new Promise(resolve => setTimeout(resolve, 60));
       } catch (err) {
         console.error('Print chunk error:', err);
         throw new Error('Gagal mengirim data ke printer');
