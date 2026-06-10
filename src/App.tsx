@@ -882,7 +882,7 @@ export default function App() {
         </header>
  
         {/* AREA HALAMAN DINAMIS (SUSPENSE) */}
-        <main className="flex-1 overflow-y-auto md:overflow-hidden p-3 md:p-6 pb-24 md:pb-6 relative bg-slate-50 dark:bg-slate-950 scroll-smooth overscroll-contain">
+        <main className={`flex-1 ${activeTab === 'kasir' ? 'md:overflow-hidden overflow-y-auto' : 'overflow-y-auto'} p-3 md:p-6 pb-24 md:pb-6 relative bg-slate-50 dark:bg-slate-950 scroll-smooth overscroll-contain`}>
           <Suspense fallback={
             <div className="absolute inset-0 flex items-center justify-center bg-slate-100/50 dark:bg-slate-950/50 backdrop-blur-xs">
               <div className="flex flex-col items-center gap-3">

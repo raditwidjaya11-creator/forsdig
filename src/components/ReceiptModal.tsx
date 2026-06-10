@@ -293,8 +293,8 @@ Kembalian:  ${formatCurrency(transaction.change)}
       </div>
     </div>
 
-    {/* Right Side: Controls */}
-    <div className="w-full md:w-[320px] bg-white border-l border-slate-200 flex flex-col print:hidden max-h-[90vh]">
+      {/* Right Side: Controls */}
+      <div className="w-full md:w-[320px] bg-white border-l border-slate-200 flex flex-col print:hidden max-h-[90vh]">
       <div className="p-4 border-b border-slate-100 flex items-center justify-between">
         <div>
           <h3 className="font-black text-slate-800 uppercase tracking-widest text-sm">Print Control</h3>

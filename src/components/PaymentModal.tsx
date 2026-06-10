@@ -247,7 +247,7 @@ export default function PaymentModal({
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
+        className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row md:max-h-[85vh]"
       >
         <AnimatePresence mode="wait">
           {isScanning && (
@@ -296,7 +296,7 @@ export default function PaymentModal({
           {!isSuccess ? (
             <div className="flex flex-col md:flex-row w-full">
               {/* Left Side: Order Summary */}
-              <div className="w-full md:w-80 bg-slate-50 p-8 border-r border-slate-100 max-h-[40vh] md:max-h-none overflow-y-auto scrollbar-hide">
+              <div className="w-full md:w-80 bg-slate-50 p-8 border-r border-slate-100 max-h-[40vh] md:max-h-[85vh] overflow-y-auto scrollbar-hide">
                 <div className="flex justify-between items-center mb-8">
                   <h2 className="text-xl font-bold text-slate-800">Ringkasan</h2>
                   <button onClick={onClose} className="md:hidden p-2 hover:bg-slate-200 rounded-full">
@@ -406,7 +406,7 @@ export default function PaymentModal({
               </div>
 
               {/* Right Side: Payment Input */}
-              <div className="flex-1 p-8 overflow-y-auto max-h-[60vh] md:max-h-none scrollbar-hide flex flex-col">
+              <div className="flex-1 p-8 overflow-y-auto max-h-[60vh] md:max-h-[85vh] scrollbar-hide flex flex-col">
                 <div className="flex items-center gap-1 mb-6 bg-slate-100 p-1 rounded-2xl w-fit">
                   <button 
                     onClick={() => setActiveRightTab('pembayaran')}
