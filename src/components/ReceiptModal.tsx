@@ -56,7 +56,7 @@ Kasir: ${transaction.paymentDetails?.cashierName || '-'}
 ${transaction.items.map(item => `${item.name.padEnd(15)} x${item.quantity} ${formatCurrency(item.price * item.quantity)}`).join('\n')}
 ========================
 Subtotal:   ${formatCurrency(transaction.subtotal)}
-${transaction.discount ? `Diskon:     -${formatCurrency(transaction.discount)}\n` : ''}Pajak (${storeSettings?.taxRate || 0}%): ${formatCurrency(transaction.tax)}
+${transaction.discount ? `Diskon:     -${formatCurrency(transaction.discount)}\n` : ''}Pajak (${transaction.tax > 0 ? (storeSettings?.taxRate || 0) : 0}%): ${formatCurrency(transaction.tax)}
 Total:      ${formatCurrency(transaction.total)}
 Metode:     ${transaction.paymentMethod}${transaction.paymentDetails?.qrName ? ` (${transaction.paymentDetails.qrName})` : ''}
 Bayar:      ${formatCurrency(transaction.amountPaid)}
@@ -234,7 +234,7 @@ Kembalian:  ${formatCurrency(transaction.change)}
               </div>
             )}
             <div className="flex justify-between text-slate-600 font-bold">
-              <span>PAJAK ({storeSettings?.taxRate || 0}%)</span>
+              <span>PAJAK ({transaction.tax > 0 ? (storeSettings?.taxRate || 0) : 0}%)</span>
               <span>{formatCurrency(transaction.tax)}</span>
             </div>
             <div className={`flex justify-between font-black pt-3 border-t border-slate-900 text-slate-900 ${

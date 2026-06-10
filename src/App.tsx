@@ -266,7 +266,8 @@ export default function App() {
       // Only broadcast if checkout screen is not open (since PaymentModal handles payment screen state)
       if (!showPayment) {
         const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-        const tax = Math.round(subtotal * ((storeSettings.taxRate || 10) / 100));
+        const taxRateVal = storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 10) : 0;
+        const tax = Math.round(subtotal * (taxRateVal / 100));
         const calculatedTotal = subtotal + tax - discount;
         channel.postMessage({
           type: 'cart',
@@ -499,7 +500,8 @@ export default function App() {
   ) => {
     const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
     const discountedSubtotal = Math.max(0, subtotal - discount);
-    const tax = discountedSubtotal * ((storeSettings?.taxRate || 11) / 100);
+    const taxRateVal = storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 11) : 0;
+    const tax = discountedSubtotal * (taxRateVal / 100);
     const total = discountedSubtotal + tax;
 
     const pointsRedeemedValue = details?.pointsRedeemedValue || 0;
@@ -935,7 +937,7 @@ export default function App() {
                     <div className="hidden lg:flex lg:col-span-1 xl:col-span-1 h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                       <Cart 
                         items={cart} 
-                        taxRate={storeSettings?.taxRate || 0}
+                        taxRate={storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 0) : 0}
                         discount={discount}
                         vouchers={vouchers}
                         appliedVoucherCode={appliedVoucherCode}
@@ -1150,7 +1152,7 @@ export default function App() {
                 <div className="bg-slate-150/10 dark:bg-slate-950/20 rounded-2xl">
                   <Cart 
                     items={cart} 
-                    taxRate={storeSettings?.taxRate || 0}
+                    taxRate={storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 0) : 0}
                     discount={discount}
                     vouchers={vouchers}
                     appliedVoucherCode={appliedVoucherCode}
@@ -1266,7 +1268,7 @@ export default function App() {
       <AnimatePresence>
         {showPayment && (
           <PaymentModal 
-            total={(Math.max(0, cart.reduce((acc, item) => acc + item.price * item.quantity, 0) - discount)) * (1 + (storeSettings?.taxRate || 0) / 100)}
+            total={(Math.max(0, cart.reduce((acc, item) => acc + item.price * item.quantity, 0) - discount)) * (1 + (storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 0) : 0) / 100)}
             subtotal={cart.reduce((acc, item) => acc + item.price * item.quantity, 0)}
             discount={discount}
             items={cart}

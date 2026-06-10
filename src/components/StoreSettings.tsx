@@ -23,6 +23,13 @@ export default function StoreSettings({
 
   const [welcomeText, setWelcomeText] = useState(settings?.displayConfig?.welcomeText || 'Selamat Datang!');
   const [promoTexts, setPromoTexts] = useState(settings?.displayConfig?.promoTexts?.join(', ') || '');
+  const [taxEnabled, setTaxEnabled] = useState<boolean>(settings?.taxEnabled !== false);
+
+  useEffect(() => {
+    if (settings) {
+      setTaxEnabled(settings.taxEnabled !== false);
+    }
+  }, [settings]);
 
   useEffect(() => {
     if (settings?.displayConfig) {
@@ -82,6 +89,7 @@ export default function StoreSettings({
       logo: logoPreview || (formData.get('logoUrl') as string) || '',
       footerMessage: formData.get('footerMessage') as string,
       taxRate: Number(formData.get('taxRate')),
+      taxEnabled: taxEnabled,
       printerServiceUuid: formData.get('printerServiceUuid') as string,
       displayConfig: {
         welcomeText: formData.get('welcomeText') as string,
@@ -199,21 +207,46 @@ export default function StoreSettings({
                 />
               </div>
 
-              {/* Tax Rate */}
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 text-nowrap">
-                  <Percent size={14} className="text-red-500" />
-                  Pajak (%)
-                </label>
-                <input
-                  name="taxRate"
-                  type="number"
-                  step="0.1"
-                  defaultValue={settings.taxRate}
-                  placeholder="11"
-                  required
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold text-slate-800"
-                />
+               {/* Tax Rate & Enable/Disable */}
+              <div className="space-y-4 border border-slate-150 rounded-3xl p-5 bg-slate-50/30">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 text-nowrap">
+                      <Percent size={14} className="text-red-500" />
+                      Status Pajak (PPN)
+                    </label>
+                    <p className="text-[10px] text-slate-400 font-medium">Aktif atau nonaktifkan pajak pada kasir</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTaxEnabled(!taxEnabled)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 ${
+                      taxEnabled ? 'bg-red-600' : 'bg-slate-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        taxEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className={`space-y-2 transition-all duration-300 ${taxEnabled ? 'opacity-100' : 'opacity-40'}`}>
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                    Persentase Pajak (%)
+                  </label>
+                  <input
+                    name="taxRate"
+                    type="number"
+                    step="0.1"
+                    defaultValue={settings.taxRate}
+                    placeholder="11"
+                    required
+                    disabled={!taxEnabled}
+                    className="w-full p-4 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-50 focus:border-red-500 transition-all font-bold text-slate-800"
+                  />
+                </div>
               </div>
             </div>
           </div>

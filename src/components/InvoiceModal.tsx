@@ -209,7 +209,7 @@ export default function InvoiceModal({ transaction, storeSettings, customer, onC
                     </div>
                   )}
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-400 font-bold uppercase text-[10px]">Pajak ({storeSettings?.taxRate || 0}%):</span>
+                    <span className="text-slate-400 font-bold uppercase text-[10px]">Pajak ({transaction.tax > 0 ? (storeSettings?.taxRate || 0) : 0}%):</span>
                     <span className="font-bold text-slate-900">{formatCurrency(transaction.tax)}</span>
                   </div>
                   {transaction.adminFee && (

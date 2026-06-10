@@ -59,6 +59,7 @@ export interface StoreSettings {
   logo: string;
   footerMessage: string;
   taxRate: number;
+  taxEnabled?: boolean;
   printerServiceUuid?: string;
   displayConfig?: {
     welcomeText?: string;
