@@ -21,6 +21,7 @@ import PaymentModal from './components/PaymentModal';
 import RecentTransactionsPOS from './components/RecentTransactionsPOS';
 import ReceiptModal from './components/ReceiptModal';
 import InvoiceModal from './components/InvoiceModal';
+import LowStockNotificationModal from './components/LowStockNotificationModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShoppingBag, 
@@ -251,6 +252,7 @@ export default function App() {
   const [selectedClientIdForCart, setSelectedClientIdForCart] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProactiveLowStock, setShowProactiveLowStock] = useState(false);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [showLainnyaMenu, setShowLainnyaMenu] = useState(false);
   
@@ -258,6 +260,19 @@ export default function App() {
   const { authState, isSyncing: isAuthSyncing, logout } = useAuth();
   const [isLocalSyncing, setIsLocalSyncing] = useState(false);
   const isSyncing = isAuthSyncing || isLocalSyncing;
+
+  useEffect(() => {
+    if (authState === 'authenticated' && products.length > 0) {
+      const hasShownSession = sessionStorage.getItem('has_shown_proactive_low_stock');
+      if (!hasShownSession) {
+        const lowestProducts = products.filter(p => p.isActive && p.stock <= (p.minStock || 0));
+        if (lowestProducts.length > 0) {
+          setShowProactiveLowStock(true);
+          sessionStorage.setItem('has_shown_proactive_low_stock', 'true');
+        }
+      }
+    }
+  }, [authState, products]);
 
   const [discount, setDiscount] = useState(0);
   const [appliedVoucherCode, setAppliedVoucherCode] = useState<string | null>(null);
@@ -1680,6 +1695,18 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Komponen Notifikasi Khusus & Peringatan Proaktif Batas Minimum Stok */}
+      <LowStockNotificationModal
+        products={products}
+        isOpen={showNotifications || showProactiveLowStock}
+        onClose={() => {
+          setShowNotifications(false);
+          setShowProactiveLowStock(false);
+        }}
+        updateProduct={updateProduct}
+        isProactiveAlert={showProactiveLowStock}
+      />
     </div>
   );
 }
