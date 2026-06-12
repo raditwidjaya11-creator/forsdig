@@ -438,6 +438,126 @@ export default function App() {
     });
   };
 
+  // Listener untuk Scanner Barcode Fisik / Eksternal (Keyboard Emulation Mode)
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleBarcodeKeyDown = (e: KeyboardEvent) => {
+      // Hanya aktif saat berada di halaman kasir, sub-tab produk, dan tidak di layar pembayaran
+      if (activeTab !== 'kasir' || showPayment || posSubTab !== 'produk') {
+        return;
+      }
+
+      // Abaikan jika tombol modifier ditekan (Ctrl, Alt, dsb)
+      if (e.ctrlKey || e.altKey || e.metaKey) {
+        return;
+      }
+
+      // Abaikan tombol navigasi, modifikasi tunggal dll
+      if (e.key.length > 1 && e.key !== 'Enter') {
+        return;
+      }
+
+      // Cek apakah ada input teks yang sedang aktif/fokus (misal form input, pengaturan, dll)
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.getAttribute('contenteditable') === 'true'
+      );
+
+      // Jika input lain sedang aktif (bukan kotak pencarian utama kasir), jangan rebut input scanner
+      // Hal ini membiarkan scanner dipakai untuk mengisi form/kolom SKU produk di halaman manajemen
+      if (isInputFocused && activeEl.id !== 'pos-search-input') {
+        return;
+      }
+
+      const now = Date.now();
+      const interval = now - lastKeyTime;
+      lastKeyTime = now;
+
+      // Reset buffer jika delay antar karakter terlalu lama (menandakan ketikan manusia, bukan mesin scanner)
+      // Mesin scanner fisik biasanya mengetik dengan jarak antar tombol < 40ms
+      const maxInterval = 60; 
+      if (interval > maxInterval) {
+        buffer = '';
+      }
+
+      // Jika tombol Enter diterima (mengindikasikan akhir pemindaian barcode)
+      if (e.key === 'Enter') {
+        const cleanBarcode = buffer.trim();
+        if (cleanBarcode.length >= 3) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Cari produk yang aktif dengan SKU / Barcode yang cocok
+          const matchedProduct = products.find(
+            p => p.isActive && p.sku?.trim().toUpperCase() === cleanBarcode.toUpperCase()
+          );
+
+          if (matchedProduct) {
+            addToCart(matchedProduct);
+
+            // Audio feedback beep menggunakan Web Audio API (suara bip kasir yang memuaskan)
+            try {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.type = 'sine';
+              oscillator.frequency.setValueAtTime(1330, audioCtx.currentTime); // High pitch beep
+              gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
+              oscillator.start();
+              oscillator.stop(audioCtx.currentTime + 0.08); // 80ms
+            } catch (err) {
+              // Abaikan kegagalan audio jika browser memblokir sebelum interaksi pertama
+            }
+
+            toast.success(`[SCANNER] Berhasil menambah ${matchedProduct.name}`, {
+              description: `Barcode / SKU: ${cleanBarcode}`,
+              icon: '🎯',
+              id: `scan-success-${matchedProduct.id}`
+            });
+          } else {
+            // Mainkan nada bip error yang lebih rendah
+            try {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.type = 'triangle';
+              oscillator.frequency.setValueAtTime(320, audioCtx.currentTime); // Low warning sound
+              gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+              oscillator.start();
+              oscillator.stop(audioCtx.currentTime + 0.18);
+            } catch {}
+
+            toast.error(`[SCANNER] Barcode tidak ditemukan!`, {
+              description: `SKU "${cleanBarcode}" tidak terdaftar atau tidak aktif.`,
+              icon: '⚠️',
+              id: `scan-fail-${cleanBarcode}`
+            });
+          }
+        }
+        buffer = '';
+        return;
+      }
+
+      // Kumpulkan karakter cetak dari scanner
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleBarcodeKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleBarcodeKeyDown, true);
+    };
+  }, [products, addToCart, activeTab, showPayment, posSubTab]);
+
   const updateCartQuantity = (id: string, delta: number) => {
     setCart((prev) => {
       let isExceeded = false;
@@ -1394,6 +1514,17 @@ export default function App() {
                       <kbd className="px-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[9px] font-black text-slate-600 dark:text-slate-200">Alt + A / 8</kbd>
                     </div>
                   </div>
+                </div>
+
+                {/* Info Scanner Barcode External */}
+                <div className="p-4 bg-red-50/50 dark:bg-rose-950/20 border border-red-100 dark:border-red-900/40 rounded-2xl space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🔌</span>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-rose-450">Scanner Barcode Eksternal / Fisik</p>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-semibold">
+                    Sistem mendukung keyboard-emulation hardware scanner (USB/Bluetooth). Cukup colok alat pemindai Anda, lantas scan produk langsung dari layar kasir kapan saja. Bip digital otomatis akan berbunyi dan item langsung masuk keranjang tanpa repot mengklik kursor!
+                  </p>
                 </div>
               </div>
 

@@ -196,9 +196,10 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400 group-focus-within:text-red-600 transition-colors" />
               <input
+                id="pos-search-input"
                 ref={searchInputRef}
                 type="text"
-                placeholder="Cari produk atau scan barcode... (Tekan [/] untuk cari)"
+                placeholder="Cari produk / scan barcode fisik langsung... (Tekan [/] untuk cari)"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
