@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo, useRef, useEffect } from 'react';
 import { Product, Category } from '../types';
-import { Search, Filter, Grid, List as ListIcon, ShoppingBag, Plus, Scan, AlertTriangle } from 'lucide-react';
+import { Search, Filter, Grid, List as ListIcon, ShoppingBag, Plus, Scan, AlertTriangle, Trash2, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from '../lib/utils';
 import BarcodeScanner from './BarcodeScanner';
@@ -10,6 +10,12 @@ interface DashboardProps {
   products: Product[];
   categories: Category[];
   onAddToCart: (p: Product) => void;
+  isBulkScanMode?: boolean;
+  setIsBulkScanMode?: (b: boolean) => void;
+  bulkScanQueue?: { product: Product; quantity: number }[];
+  setBulkScanQueue?: React.Dispatch<React.SetStateAction<{ product: Product; quantity: number }[]>>;
+  onConfirmBulkScan?: () => void;
+  onClearBulkScan?: () => void;
 }
 
 const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToCart: (p: Product) => void }) => {
@@ -111,13 +117,45 @@ const ProductCard = memo(({ product, onAddToCart }: { product: Product, onAddToC
   );
 });
 
-export default function Dashboard({ products, categories, onAddToCart }: DashboardProps) {
+export default function Dashboard({ 
+  products, 
+  categories, 
+  onAddToCart,
+  isBulkScanMode = false,
+  setIsBulkScanMode,
+  bulkScanQueue = [],
+  setBulkScanQueue,
+  onConfirmBulkScan,
+  onClearBulkScan
+}: DashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Semua');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isLowStockExpanded, setIsLowStockExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const hasShownToast = useRef(false);
+
+  const handleUpdateQueueQty = (productId: string, delta: number) => {
+    if (!setBulkScanQueue) return;
+    setBulkScanQueue(prev => prev.map(item => {
+      if (item.product.id === productId) {
+        const itemStock = item.product.stock;
+        const newQty = Math.max(1, item.quantity + delta);
+        if (newQty > itemStock) {
+          toast.error(`Maksimal stok tersedia hanya ${itemStock} ${item.product.unit || 'pcs'}.`, { id: 'max-stock-queue' });
+          return item;
+        }
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    }));
+  };
+
+  const handleRemoveQueueItem = (productId: string) => {
+    if (!setBulkScanQueue) return;
+    setBulkScanQueue(prev => prev.filter(item => item.product.id !== productId));
+    toast.info("Produk dihapus dari antrean.", { id: 'queue-item-removed' });
+  };
 
   // Auto trigger alert on page load if there are low stock items
   useEffect(() => {
@@ -209,10 +247,25 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
             <button
               onClick={() => setIsScannerOpen(true)}
               className="px-4 py-3 sm:py-3.5 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all shadow-sm flex items-center gap-2 active:scale-95 shrink-0"
-              title="Scan Barcode"
+              title="Scan Barcode dengan Kamera"
             >
               <Scan size={18} />
               <span className="hidden sm:inline font-bold text-xs uppercase tracking-widest">Scan</span>
+            </button>
+            <button
+              onClick={() => setIsBulkScanMode?.(!isBulkScanMode)}
+              className={`px-4 py-3 sm:py-3.5 rounded-2xl transition-all shadow-sm flex items-center gap-2 active:scale-95 shrink-0 border ${
+                isBulkScanMode 
+                  ? 'bg-amber-500 border-amber-400 text-slate-950 font-black' 
+                  : 'bg-white border-slate-200 text-slate-600 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-200'
+              }`}
+              title="Toggle Mode Pemindaian Massal (Bulk Scan)"
+            >
+              <span className="text-base sm:text-lg">⚡</span>
+              <span className="hidden sm:inline font-bold text-xs uppercase tracking-widest">Bulk Scan</span>
+              <span className={`inline-flex items-center justify-center text-[10px] h-4 w-4 rounded-full font-bold ${isBulkScanMode ? 'bg-slate-950 text-amber-400' : 'bg-slate-100 text-slate-600'}`}>
+                {bulkScanQueue.length}
+              </span>
             </button>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 xl:pb-0 w-auto scrollbar-hide">
@@ -231,6 +284,164 @@ export default function Dashboard({ products, categories, onAddToCart }: Dashboa
             ))}
           </div>
         </div>
+
+        {/* Bulk Scan Active Mode Panel */}
+        {isBulkScanMode && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-slate-905 bg-slate-900 text-white rounded-3xl p-4 md:p-6 border-2 border-amber-500/40 shadow-2xl relative overflow-hidden"
+          >
+            {/* Ambient gold glow decoration */}
+            <div className="absolute right-[-24px] top-[-24px] w-44 h-44 bg-amber-500/5 rounded-full pointer-events-none blur-2xl" />
+            
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 bg-amber-500/15 text-amber-400 rounded-xl border border-amber-500/20 shrink-0 self-center">
+                  <span className="text-xl sm:text-2xl animate-pulse inline-block">⚡</span>
+                </div>
+                <div>
+                  <h4 className="text-sm sm:text-base font-black tracking-wider text-amber-400 uppercase flex flex-wrap items-center gap-2">
+                    Mode Pemindaian Massal Aktif
+                    <span className="bg-red-500/20 text-red-300 border border-red-500/30 text-[9px] font-black tracking-widest uppercase px-2 py-0.5 rounded-md animate-pulse">
+                      BULK SCANNING
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-2xl font-medium mt-0.5">
+                    Item yang di-scan (lewat laser barcode fisik / kamera) maupun diklik akan terkumpul di dalam antrean sementara. Tekan tombol <b className="text-emerald-400">"Masukkan Ke Keranjang"</b> jika sudah selesai memindai semua belanjaan.
+                  </p>
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => setIsBulkScanMode?.(false)}
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-all shrink-0 self-start md:self-center uppercase tracking-wider hover:text-white"
+              >
+                Matikan Mode
+              </button>
+            </div>
+
+            {/* Queue Item List */}
+            <div className="pt-4">
+              {bulkScanQueue.length === 0 ? (
+                <div className="py-8 text-center flex flex-col items-center justify-center bg-slate-950/40 rounded-2xl border border-slate-850">
+                  <div className="w-12 h-12 bg-slate-800/40 rounded-full flex items-center justify-center mb-3 border border-slate-800">
+                    <span className="text-xl text-slate-400">📡</span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-400 mb-1">Siap memindai... Antrean bulk scan masih kosong.</p>
+                  <p className="text-[10px] text-slate-500 px-4">Arahkan barcode scanner, nyalakan kamera scan, atau ketuk item produk di halaman ini untuk mulai mengumpulkan.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="max-h-60 overflow-y-auto pr-1 space-y-2.5 divide-y divide-slate-800/40">
+                    {bulkScanQueue.map((item) => {
+                      const maxQtyPossible = item.product.stock;
+                      const lineTotal = item.product.price * item.quantity;
+                      
+                      return (
+                        <div 
+                          key={item.product.id} 
+                          className="flex items-center justify-between gap-3 pt-2.5 first:pt-0"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {/* Product Image */}
+                            <div className="w-9 h-9 rounded-lg bg-slate-800 overflow-hidden shrink-0 border border-slate-700/50 flex items-center justify-center relative">
+                              <img src={item.product.image} className="w-full h-full object-cover" />
+                            </div>
+                            
+                            {/* Title & SKU */}
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white truncate leading-tight uppercase flex items-center gap-1.5">
+                                {item.product.name}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="bg-slate-800 text-slate-300 font-mono text-[8px] px-1 rounded border border-slate-700 font-semibold uppercase">
+                                  SKU: {item.product.sku || '-'}
+                                </span>
+                                <span className="text-[9.5px] text-slate-400 font-semibold">
+                                  {formatCurrency(item.product.price)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Quantity Controls & Line Total */}
+                          <div className="flex items-center gap-4 shrink-0">
+                            {/* Counter buttons */}
+                            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg overflow-hidden h-7">
+                              <button 
+                                onClick={() => handleUpdateQueueQty(item.product.id, -1)}
+                                className="px-2 h-full text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
+                              >
+                                <Minus size={11} />
+                              </button>
+                              <span className="w-8 text-center text-xs font-black text-white font-mono bg-slate-850">
+                                {item.quantity}
+                              </span>
+                              <button 
+                                onClick={() => handleUpdateQueueQty(item.product.id, 1)}
+                                disabled={item.quantity >= maxQtyPossible}
+                                className="px-2 h-full text-slate-400 hover:bg-slate-700 hover:text-white transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                              >
+                                <Plus size={11} />
+                              </button>
+                            </div>
+                            
+                            {/* Price */}
+                            <span className="w-20 text-right text-xs font-mono font-bold text-amber-500">
+                              {formatCurrency(lineTotal)}
+                            </span>
+                            
+                            {/* Remove button */}
+                            <button 
+                              onClick={() => handleRemoveQueueItem(item.product.id)}
+                              className="text-slate-400 hover:text-red-400 p-1 bg-slate-800 hover:bg-slate-750 rounded-lg transition-all border border-slate-700/50"
+                              title="Hapus dari antrean"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Summary & Confirm Actions */}
+                  <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                        Total Antrean:
+                      </span>
+                      <span className="bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded text-[10px] tracking-wide uppercase leading-none">
+                        {bulkScanQueue.reduce((acc, q) => acc + q.quantity, 0)} Items
+                      </span>
+                      <span className="text-sm font-black font-mono text-white text-amber-400">
+                        {formatCurrency(bulkScanQueue.reduce((acc, q) => acc + q.product.price * q.quantity, 0))}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={onClearBulkScan}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all border border-slate-700/50 uppercase tracking-wider text-center"
+                      >
+                        Batal
+                      </button>
+                      <button 
+                        onClick={onConfirmBulkScan}
+                        className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-950/20 transition-all hover:scale-102 active:scale-98 uppercase tracking-widest flex items-center justify-center gap-1.5"
+                      >
+                        <span>Masukkan Ke Keranjang</span>
+                        <span className="text-sm bg-slate-950/20 text-slate-950 px-1 py-0.5 rounded">⏎</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Low Stock Warning Banner & Interactive Widget */}
         {lowStockProducts.length > 0 && (

@@ -231,6 +231,19 @@ export default function App() {
   const [posSubTab, setPosSubTab] = useState<'produk' | 'riwayat'>('produk');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showPayment, setShowPayment] = useState(false);
+  const [isBulkScanMode, setIsBulkScanMode] = useState(false);
+  const [bulkScanQueue, setBulkScanQueue] = useState<{ product: Product; quantity: number }[]>([]);
+  
+  const isBulkScanModeRef = useRef(isBulkScanMode);
+  const bulkScanQueueRef = useRef(bulkScanQueue);
+  
+  useEffect(() => {
+    isBulkScanModeRef.current = isBulkScanMode;
+  }, [isBulkScanMode]);
+
+  useEffect(() => {
+    bulkScanQueueRef.current = bulkScanQueue;
+  }, [bulkScanQueue]);
   const [showHotkeyGuide, setShowHotkeyGuide] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<Transaction | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
@@ -403,6 +416,114 @@ export default function App() {
     };
   }, [handleSyncData]);
 
+  const handleAddToBulkQueue = useCallback((product: Product, qty: number = 1) => {
+    if (product.stock <= 0) {
+      toast.error(`Stok ${product.name} habis!`, { icon: '🚫' });
+      return;
+    }
+    setBulkScanQueue(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      const queueQty = existing ? existing.quantity : 0;
+      if (queueQty + qty > product.stock) {
+        toast.error(`Gagal menambah ke antrean: Stok ${product.name} tidak mencukupi (Maksimal ${product.stock} ${product.unit || 'pcs'}).`, { icon: '⚠️' });
+        return prev;
+      }
+      if (existing) {
+        return prev.map(item => 
+          item.product.id === product.id ? { ...item, quantity: item.quantity + qty } : item
+        );
+      }
+      return [...prev, { product, quantity: qty }];
+    });
+
+    // Beep audio feedback using Web Audio API
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(1400, audioCtx.currentTime); // High pitch distinct queue beep
+      gainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.08);
+    } catch {}
+  }, []);
+
+  const confirmBulkScan = useCallback(() => {
+    if (bulkScanQueueRef.current.length === 0) {
+      toast.error("Antrean bulk scan kosong!");
+      return;
+    }
+
+    setCart(prev => {
+      let updatedCart = [...prev];
+      bulkScanQueueRef.current.forEach(queueItem => {
+        const existing = updatedCart.find(item => item.id === queueItem.product.id);
+        const itemStock = queueItem.product.stock;
+        if (existing) {
+          updatedCart = updatedCart.map(item => 
+            item.id === queueItem.product.id 
+              ? { ...item, quantity: Math.min(item.quantity + queueItem.quantity, itemStock) } 
+              : item
+          );
+        } else {
+          updatedCart.push({ ...queueItem.product, quantity: Math.min(queueItem.quantity, itemStock) });
+        }
+      });
+      return updatedCart;
+    });
+
+    toast.success("Berhasil memasukkan antrean ke keranjang!", {
+      description: `Menambahkan ${bulkScanQueueRef.current.reduce((acc, q) => acc + q.quantity, 0)} item ke keranjang.`,
+      icon: '✅',
+      id: 'bulk-scan-confirmed'
+    });
+
+    setBulkScanQueue([]);
+
+    // Double satisfaction bip chord
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc1.frequency.setValueAtTime(950, audioCtx.currentTime);
+      osc2.frequency.setValueAtTime(1200, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      osc1.start();
+      osc2.start();
+      osc1.stop(audioCtx.currentTime + 0.15);
+      osc2.stop(audioCtx.currentTime + 0.15);
+    } catch {}
+  }, []);
+
+  const clearBulkScan = useCallback(() => {
+    setBulkScanQueue([]);
+    toast.info("Antrean bulk scan telah dikosongkan.", {
+      id: 'bulk-scan-cleared'
+    });
+  }, []);
+
+  const handleAddToCartAndIntercept = useCallback((product: Product) => {
+    if (isBulkScanModeRef.current) {
+      handleAddToBulkQueue(product);
+      const currentInQueue = (bulkScanQueueRef.current.find(item => item.product.id === product.id)?.quantity || 0) + 1;
+      toast.success(`[QUEUED] ${product.name} masuk antrean`, {
+        description: `Jumlah dalam antrean sekarang: ${currentInQueue}x`,
+        icon: '📥',
+        duration: 1500,
+        id: `bulk-queue-added-${product.id}`
+      });
+    } else {
+      addToCart(product);
+    }
+  }, [handleAddToBulkQueue]);
+
   const addToCart = (product: Product) => {
     if (product.stock <= 0) {
       toast.error(`Stok ${product.name} telah habis!`, { icon: '🚫' });
@@ -497,29 +618,40 @@ export default function App() {
           );
 
           if (matchedProduct) {
-            addToCart(matchedProduct);
+            if (isBulkScanModeRef.current) {
+              handleAddToBulkQueue(matchedProduct);
+              const currentInQueue = (bulkScanQueueRef.current.find(item => item.product.id === matchedProduct.id)?.quantity || 0) + 1;
+              toast.success(`[BULK SCAN] ${matchedProduct.name} masuk antrean`, {
+                description: `Jumlah dalam antrean: ${currentInQueue}x (${matchedProduct.sku || '-'})`,
+                icon: '📥',
+                duration: 1500,
+                id: `bulk-scan-physical-${matchedProduct.id}`
+              });
+            } else {
+              addToCart(matchedProduct);
 
-            // Audio feedback beep menggunakan Web Audio API (suara bip kasir yang memuaskan)
-            try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              oscillator.type = 'sine';
-              oscillator.frequency.setValueAtTime(1330, audioCtx.currentTime); // High pitch beep
-              gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
-              oscillator.start();
-              oscillator.stop(audioCtx.currentTime + 0.08); // 80ms
-            } catch (err) {
-              // Abaikan kegagalan audio jika browser memblokir sebelum interaksi pertama
+              // Audio feedback beep menggunakan Web Audio API (suara bip kasir yang memuaskan)
+              try {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(1330, audioCtx.currentTime); // High pitch beep
+                gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.08); // 80ms
+              } catch (err) {
+                // Abaikan kegagalan audio jika browser memblokir sebelum interaksi pertama
+              }
+
+              toast.success(`[SCANNER] Berhasil menambah ${matchedProduct.name}`, {
+                description: `Barcode / SKU: ${cleanBarcode}`,
+                icon: '🎯',
+                id: `scan-success-${matchedProduct.id}`
+              });
             }
-
-            toast.success(`[SCANNER] Berhasil menambah ${matchedProduct.name}`, {
-              description: `Barcode / SKU: ${cleanBarcode}`,
-              icon: '🎯',
-              id: `scan-success-${matchedProduct.id}`
-            });
           } else {
             // Mainkan nada bip error yang lebih rendah
             try {
@@ -556,7 +688,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleBarcodeKeyDown, true);
     };
-  }, [products, addToCart, activeTab, showPayment, posSubTab]);
+  }, [products, addToCart, activeTab, showPayment, posSubTab, handleAddToBulkQueue]);
 
   const updateCartQuantity = (id: string, delta: number) => {
     setCart((prev) => {
@@ -1034,7 +1166,17 @@ export default function App() {
                             exit={{ opacity: 0, scale: 1.02 }}
                             className="flex-1 overflow-visible md:overflow-hidden flex flex-col h-auto md:h-full"
                           >
-                            <Dashboard products={products} categories={categories} onAddToCart={addToCart} />
+                            <Dashboard 
+                              products={products} 
+                              categories={categories} 
+                              onAddToCart={handleAddToCartAndIntercept} 
+                              isBulkScanMode={isBulkScanMode}
+                              setIsBulkScanMode={setIsBulkScanMode}
+                              bulkScanQueue={bulkScanQueue}
+                              setBulkScanQueue={setBulkScanQueue}
+                              onConfirmBulkScan={confirmBulkScan}
+                              onClearBulkScan={clearBulkScan}
+                            />
                           </motion.div>
                         ) : (
                           <motion.div 
