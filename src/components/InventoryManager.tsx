@@ -1,4 +1,4 @@
-import React, { useState, useRef, memo, useCallback } from 'react';
+import React, { useState, useRef, memo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Edit2, Trash2, Save, X, Search, Package, AlertTriangle, CheckCircle2, XCircle, Upload, Download, FileText, Info, Scan, Printer, Check } from 'lucide-react';
 import { Product, StoreSettings, Category } from '../types';
@@ -186,6 +186,124 @@ export default function InventoryManager({
       setIsCustomUnit(false);
     }
   }, []);
+
+  // Listener untuk Scanner Barcode Fisik / Eksternal (Keyboard Emulation Mode) di Form Edit/Tambah Produk
+  useEffect(() => {
+    // Hanya aktif jika modal Tambah atau Edit produk sedang terbuka
+    if (!isAdding && !editingProduct) {
+      return;
+    }
+
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleBarcodeKeyDown = (e: KeyboardEvent) => {
+      // Abaikan modifier keys (Ctrl, Alt, Meta)
+      if (e.ctrlKey || e.altKey || e.metaKey) {
+        return;
+      }
+
+      // Abaikan jika bukan tombol karakter tunggal, kecuali Enter
+      if (e.key.length > 1 && e.key !== 'Enter') {
+        return;
+      }
+
+      const now = Date.now();
+      const interval = now - lastKeyTime;
+      lastKeyTime = now;
+
+      // Cek apakah delay antar karakter terbilang cepat (indikasi keyboard emulation dari scanner barcode fisik)
+      // Jarak ketik scanner fisik biasanya < 45-60ms
+      const maxInterval = 60;
+      if (interval > maxInterval) {
+        buffer = '';
+      }
+
+      // Jika tombol Enter ditekan
+      if (e.key === 'Enter') {
+        const cleanBarcode = buffer.trim();
+        
+        // Cek jika memang ada buffer barcode terkumpul (minimal 3 karakter)
+        if (cleanBarcode.length >= 3) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          if (skuInputRef.current) {
+            skuInputRef.current.value = cleanBarcode;
+            // Memicu event change agar form mengenali perubahan nilai
+            skuInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          // Audio feedback beep kasir
+          try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(1330, audioCtx.currentTime); // High pitch beep
+            gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.08); // 80ms
+          } catch (err) {}
+
+          toast.success(`Barcode berhasil dipindai: ${cleanBarcode}`, {
+            icon: '🎯',
+            id: `sku-scan-success-${cleanBarcode}`
+          });
+          
+          buffer = '';
+          return;
+        }
+
+        // TUNGGU! Bagaimana jika input SKU sedang aktif/fokus, dan user memicu scanner dari sana?
+        // Dalam kondisi tersebut, browser mungkin telah memproses ketukan karakter satu per satu 
+        // langsung kedalam input (tanpa buffer kita karena alasan apa pun).
+        // Saat 'Enter' ditekan oleh scanner, kita HARUS mencegah 'Enter' ini men-submit/menyimpan form!
+        const activeEl = document.activeElement;
+        const isSkuInputFocused = activeEl && activeEl === skuInputRef.current;
+        if (isSkuInputFocused) {
+          // Cegah Enter melakukan submit form jika keyboard input datang sangat cepat atau baru saja selesai
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Audio feedback
+          try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(1330, audioCtx.currentTime); // High pitch beep
+            gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.08); // 80ms
+          } catch (err) {}
+
+          toast.success(`Barcode diterima di kolom SKU`, {
+            icon: '🎯',
+            id: 'sku-scan-focused'
+          });
+        }
+
+        buffer = '';
+        return;
+      }
+
+      // Kumpulkan karakter cetak
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    // Gunakan capture phase (true) agar mendahului handler submit form bawaan browser
+    window.addEventListener('keydown', handleBarcodeKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleBarcodeKeyDown, true);
+    };
+  }, [isAdding, editingProduct]);
 
   const handleToggleBarcode = useCallback((product: Product) => {
     setSelectedForBarcode(prev => {
