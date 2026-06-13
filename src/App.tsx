@@ -1143,7 +1143,7 @@ export default function App() {
             {activeTab === 'kasir' && (
               <button 
                 onClick={() => setShowMobileCart(true)}
-                className="lg:hidden p-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 relative text-slate-600 dark:text-slate-300 flex items-center gap-1.5 px-3 py-1.5 border border-slate-200/50 dark:border-slate-700/60 transition-all hover:scale-[1.02] active:scale-97"
+                className="xl:hidden p-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 relative text-slate-600 dark:text-slate-300 flex items-center gap-1.5 px-3 py-1.5 border border-slate-200/50 dark:border-slate-700/60 transition-all hover:scale-[1.02] active:scale-97"
                 title="Buka Keranjang Belanja"
               >
                 <div className="relative">
@@ -1190,8 +1190,8 @@ export default function App() {
                 className="h-auto md:h-full"
               >
                 {activeTab === 'kasir' && (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 h-auto md:h-full items-stretch overflow-visible md:overflow-hidden">
-                    <div className="lg:col-span-2 xl:col-span-3 flex flex-col h-auto md:h-full overflow-visible md:overflow-hidden">
+                  <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 md:gap-6 h-auto md:h-full items-stretch overflow-visible md:overflow-hidden">
+                    <div className="xl:col-span-3 flex flex-col h-auto md:h-full overflow-visible md:overflow-hidden">
                       <AnimatePresence mode="wait">
                         {posSubTab === 'produk' ? (
                           <motion.div 
@@ -1231,7 +1231,7 @@ export default function App() {
                       </AnimatePresence>
                     </div>
 
-                    <div className="hidden lg:flex lg:col-span-1 xl:col-span-1 h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <div className="hidden xl:flex xl:col-span-1 h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                       <Cart 
                         items={cart} 
                         taxRate={storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 0) : 0}
@@ -1330,7 +1330,7 @@ export default function App() {
 
       {/* MOBILE & TABLET FLOATING CART BUBBLE (LIVIN' CHEKOUT POP) */}
       {cart.length > 0 && activeTab === 'kasir' && !showMobileCart && (
-        <div className="lg:hidden fixed bottom-20 md:bottom-24 left-1/2 md:left-auto md:right-8 -translate-x-1/2 md:translate-x-0 z-40 w-[90%] md:w-auto max-w-sm">
+        <div className="xl:hidden fixed bottom-20 md:bottom-24 left-1/2 md:left-auto md:right-8 -translate-x-1/2 md:translate-x-0 z-40 w-[90%] md:w-auto max-w-sm">
           <motion.button 
             initial={{ opacity: 0, y: 15, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1409,7 +1409,7 @@ export default function App() {
       {/* MOBILE & TABLET BOTTOM SHEET FOR CART (RESPONSIVE NO CUT-OFFS) */}
       <AnimatePresence>
         {showMobileCart && (
-          <div className="fixed inset-0 z-[60] lg:hidden flex flex-col justify-end p-0 sm:p-4">
+          <div className="fixed inset-0 z-[60] xl:hidden flex flex-col justify-end p-0 sm:p-4">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
