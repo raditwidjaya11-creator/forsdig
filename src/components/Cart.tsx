@@ -21,6 +21,7 @@ interface CartProps {
   clients?: Client[];
   selectedClientId?: string | null;
   onSelectClient?: (id: string | null) => void;
+  isOverlay?: boolean;
 }
 
 const CartItem = memo(({ item, onUpdateQuantity, onRemove }: { item: Product & { quantity: number }, onUpdateQuantity: (id: string, delta: number) => void, onRemove: (id: string) => void }) => (
@@ -81,7 +82,8 @@ export default function Cart({
   onApplyVoucher,
   clients = [],
   selectedClientId = null,
-  onSelectClient
+  onSelectClient,
+  isOverlay = false
 }: CartProps) {
   const [manualPrice, setManualPrice] = useState('');
   const [showManual, setShowManual] = useState(false);
@@ -164,9 +166,9 @@ export default function Cart({
   const total = useMemo(() => discountedSubtotal + tax, [discountedSubtotal, tax]);
 
   return (
-    <div className="h-full flex flex-col bg-white border-l border-slate-200 shadow-lg">
-      <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-        <h2 className="font-bold text-slate-700 flex items-center gap-2">
+    <div className={`h-full flex flex-col ${isOverlay ? 'bg-transparent' : 'bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-lg'}`}>
+      <div className="p-4 border-b border-slate-100 dark:border-slate-800/85 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
+        <h2 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
           Keranjang Belanja
         </h2>
         <div className="flex items-center gap-2">
@@ -176,7 +178,7 @@ export default function Cart({
               if (showManual) setShowManual(false);
               if (showVoucher) setShowVoucher(false);
             }}
-            className={`p-1.5 rounded-lg transition-colors border border-transparent ${discount > 0 ? 'bg-orange-50 text-orange-600 border-orange-100' : 'hover:bg-orange-50 text-orange-600 hover:border-orange-100'}`}
+            className={`p-1.5 rounded-lg transition-colors border border-transparent ${discount > 0 ? 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-450 border-orange-100 dark:border-orange-900/60' : 'hover:bg-orange-50 dark:hover:bg-orange-950/30 text-orange-600 dark:text-orange-450 hover:border-orange-100 dark:hover:border-orange-900/40'}`}
             title="Tambah Diskon Manual"
           >
             <div className="flex items-center gap-1">
@@ -189,7 +191,7 @@ export default function Cart({
               if (showManual) setShowManual(false);
               if (showDiscount) setShowDiscount(false);
             }}
-            className={`p-1.5 rounded-lg transition-colors border border-transparent ${appliedVoucher ? 'bg-blue-50 text-blue-600 border-blue-100' : 'hover:bg-blue-50 text-blue-600 hover:border-blue-100'}`}
+            className={`p-1.5 rounded-lg transition-colors border border-transparent ${appliedVoucher ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-450 border-blue-100 dark:border-blue-900/60' : 'hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-450 hover:border-blue-100 dark:hover:border-blue-900/40'}`}
             title="Gunakan Voucher"
           >
             <Ticket size={18} />
@@ -200,12 +202,12 @@ export default function Cart({
               if (showDiscount) setShowDiscount(false);
               if (showVoucher) setShowVoucher(false);
             }}
-            className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors border border-transparent hover:border-red-100"
+            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-450 rounded-lg transition-colors border border-transparent hover:border-red-100 dark:hover:border-red-900/40"
             title="Tambah Barang Manual"
           >
             <Keyboard size={18} />
           </button>
-          <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">
+          <span className="px-2 py-1 bg-red-100 dark:bg-red-950/70 text-red-700 dark:text-red-400 rounded text-xs font-bold border border-red-200/20">
             {items.reduce((acc, i) => acc + i.quantity, 0)} Item
           </span>
         </div>
@@ -215,7 +217,7 @@ export default function Cart({
         <motion.div 
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
-          className="p-4 bg-orange-50/50 border-b border-orange-100 space-y-2 overflow-hidden"
+          className="p-4 bg-orange-50/50 dark:bg-orange-950/20 border-b border-orange-100 dark:border-orange-900/40 space-y-2 overflow-hidden"
         >
           <label className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Diskon Manual (Rp)</label>
           <div className="flex gap-2">
@@ -232,7 +234,7 @@ export default function Cart({
                 onApplyVoucher(null);
               }}
               placeholder="0"
-              className="flex-1 px-3 py-2 bg-white border border-orange-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold"
+              className="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-orange-200 dark:border-orange-900/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold dark:text-white"
             />
             <button 
               onClick={() => {
@@ -253,19 +255,19 @@ export default function Cart({
         <motion.div 
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
-          className="p-4 bg-blue-50/50 border-b border-blue-100 space-y-2 overflow-hidden"
+          className="p-4 bg-blue-50/50 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/40 space-y-2 overflow-hidden"
         >
           <label className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Kode Voucher</label>
           <form onSubmit={handleApplyVoucher} className="flex gap-2">
             <div className="flex-1 relative">
-              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300" size={14} />
+              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300 dark:text-blue-700" size={14} />
               <input
                 autoFocus
                 type="text"
                 value={voucherCode}
                 onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
                 placeholder="PROMO2024"
-                className="w-full pl-9 pr-3 py-2 bg-white border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold tracking-widest uppercase"
+                className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-900/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold tracking-widest uppercase dark:text-white"
               />
             </div>
             <button 
@@ -317,20 +319,20 @@ export default function Cart({
       )}
 
       {/* Client / CRM Selector */}
-      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 space-y-1.5 shrink-0">
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 space-y-1.5 shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-slate-500">
             <User size={14} className="text-red-500" />
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Pelanggan POS</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Pelanggan POS</span>
           </div>
           <select
             value={selectedClientId || ''}
             onChange={(e) => onSelectClient?.(e.target.value || null)}
-            className="bg-transparent border-0 text-xs font-bold text-slate-800 focus:outline-none focus:ring-0 max-w-[150px] cursor-pointer text-right appearance-none font-extrabold text-red-650"
+            className="bg-transparent border-0 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-0 max-w-[150px] cursor-pointer text-right appearance-none font-extrabold text-red-650 dark:text-red-400"
           >
-            <option value="">Umum (Pelanggan)</option>
+            <option value="" className="dark:bg-slate-900">Umum (Pelanggan)</option>
             {clients?.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id} className="dark:bg-slate-900">{c.name}</option>
             ))}
           </select>
         </div>
@@ -343,10 +345,10 @@ export default function Cart({
             <motion.div 
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
-              className="flex items-center justify-between pt-1.5 border-t border-slate-100/80 text-[10px] text-slate-500 font-extrabold"
+              className="flex items-center justify-between pt-1.5 border-t border-slate-100/80 dark:border-slate-800/60 text-[10px] text-slate-500 font-extrabold"
             >
-              <span className="text-slate-400">Saldo: <strong className="text-amber-600">{currentPoints} Poin</strong></span>
-              <span className="text-slate-400">Dapat Poin: <strong className="text-emerald-600">+{estPoints}</strong></span>
+              <span className="text-slate-400">Saldo: <strong className="text-amber-600 dark:text-amber-400">{currentPoints} Poin</strong></span>
+              <span className="text-slate-400">Dapat Poin: <strong className="text-emerald-600 dark:text-emerald-400">+{estPoints}</strong></span>
             </motion.div>
           );
         })()}
@@ -358,9 +360,9 @@ export default function Cart({
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4"
+              className="h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-700 space-y-4"
             >
-              <ShoppingCart size={48} className="opacity-10" />
+              <ShoppingCart size={48} className="opacity-10 dark:opacity-20" />
               <p className="text-sm font-medium">Kosong</p>
             </motion.div>
           ) : (
@@ -376,35 +378,35 @@ export default function Cart({
         </AnimatePresence>
       </div>
 
-      <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3">
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-500 font-medium">
+      <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 space-y-3">
+        <div className="space-y-1 font-semibold text-slate-750 dark:text-slate-200">
+          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-medium font-bold">
             <span>Subtotal</span>
             <span>{formatCurrency(subtotal)}</span>
           </div>
           {discount > 0 && (
-            <div className="flex justify-between text-xs text-orange-600 font-medium">
+            <div className="flex justify-between text-xs text-orange-600 dark:text-orange-400 font-medium font-bold animate-pulse">
               <span>Diskon</span>
               <span>-{formatCurrency(discount)}</span>
             </div>
           )}
-          <div className="flex justify-between text-xs text-slate-500 font-medium">
+          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-medium font-bold">
             <span>Pajak (PPN {taxRate}%)</span>
             <span>{formatCurrency(tax)}</span>
           </div>
-          <div className="flex justify-between text-xl font-bold text-slate-800 pt-3 border-t border-slate-200 mt-2">
+          <div className="flex justify-between text-lg md:text-xl font-black text-slate-800 dark:text-white pt-2.5 border-t border-slate-250 dark:border-slate-800 mt-2">
             <span>Total</span>
-            <span className="text-red-600">{formatCurrency(total)}</span>
+            <span className="text-red-650 dark:text-red-400 font-mono font-black">{formatCurrency(total)}</span>
           </div>
         </div>
 
         {!hasActiveShift && items.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-805 text-xs flex gap-2 items-start mt-3">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3 text-amber-805 text-xs flex gap-2 items-start mt-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div>
-              <p className="font-extrabold text-amber-850">Perhatian: Shift Belum Dibuka</p>
-              <p className="text-[11px] text-amber-700 mt-0.5">
-                Transaksi tunai tidak akan dicatat di pencapaian laci kas kasir.
+              <p className="font-extrabold text-amber-850 dark:text-amber-300">Shift Belum Dibuka</p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                Pencatatan uang tunai tidak otomatis masuk ke drawer.
               </p>
             </div>
           </div>
@@ -413,10 +415,10 @@ export default function Cart({
         <button
           onClick={onCheckout}
           disabled={items.length === 0}
-          className="w-full py-4 bg-red-600 text-white rounded-xl font-bold mt-4 shadow-lg shadow-red-100 flex items-center justify-center gap-2 hover:bg-red-700 transition-all disabled:opacity-50"
+          className="w-full py-3.5 bg-red-600 hover:bg-red-700 active:scale-97 text-white rounded-xl font-bold mt-2 shadow-lg shadow-red-100 dark:shadow-none flex items-center justify-center gap-2 transition-all disabled:opacity-50"
         >
-          <span>Bayar Sekarang</span>
-          <CreditCard className="w-5 h-5" />
+          <span className="uppercase tracking-wider text-xs font-black">Bayar Sekarang</span>
+          <CreditCard className="w-4 h-4" />
         </button>
       </div>
     </div>

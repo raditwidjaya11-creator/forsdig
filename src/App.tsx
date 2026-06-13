@@ -1140,6 +1140,26 @@ export default function App() {
               <span className="hidden md:inline">Layar Pelanggan</span>
             </button>
  
+            {activeTab === 'kasir' && (
+              <button 
+                onClick={() => setShowMobileCart(true)}
+                className="lg:hidden p-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 relative text-slate-600 dark:text-slate-300 flex items-center gap-1.5 px-3 py-1.5 border border-slate-200/50 dark:border-slate-700/60 transition-all hover:scale-[1.02] active:scale-97"
+                title="Buka Keranjang Belanja"
+              >
+                <div className="relative">
+                  <ShoppingBag className="h-5 w-5 text-red-650 dark:text-red-400" />
+                  {cart.length > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white dark:border-slate-800 animate-pulse">
+                      {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    </span>
+                  )}
+                </div>
+                <span className="hidden sm:inline text-xs font-black text-rose-700 dark:text-red-400 uppercase tracking-wider">
+                  Keranjang
+                </span>
+              </button>
+            )}
+
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 relative text-slate-600 dark:text-slate-300"
@@ -1308,16 +1328,16 @@ export default function App() {
         </main>
       </div>
 
-      {/* MOBILE FLOATING CART BUBBLE (LIVIN' CHEKOUT POP) */}
+      {/* MOBILE & TABLET FLOATING CART BUBBLE (LIVIN' CHEKOUT POP) */}
       {cart.length > 0 && activeTab === 'kasir' && !showMobileCart && (
-        <div className="md:hidden fixed bottom-20 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-sm">
+        <div className="lg:hidden fixed bottom-20 md:bottom-24 left-1/2 md:left-auto md:right-8 -translate-x-1/2 md:translate-x-0 z-40 w-[90%] md:w-auto max-w-sm">
           <motion.button 
             initial={{ opacity: 0, y: 15, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 15, scale: 0.9 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => setShowMobileCart(true)}
-            className="w-full bg-red-600 dark:bg-red-500 text-white font-extrabold text-xs px-5 py-3.5 rounded-full shadow-2xl flex items-center justify-between border border-red-400/30"
+            className="w-full bg-red-600 dark:bg-red-500 text-white font-extrabold text-xs px-5 md:px-6 py-3.5 md:py-4 rounded-full shadow-2xl flex items-center gap-4 justify-between border border-red-400/30 whitespace-nowrap"
           >
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -1386,10 +1406,10 @@ export default function App() {
         </button>
       </div>
 
-      {/* MOBILE BOTTOM SHEET FOR CART */}
+      {/* MOBILE & TABLET BOTTOM SHEET FOR CART (RESPONSIVE NO CUT-OFFS) */}
       <AnimatePresence>
         {showMobileCart && (
-          <div className="fixed inset-0 z-[60] md:hidden flex flex-col justify-end">
+          <div className="fixed inset-0 z-[60] lg:hidden flex flex-col justify-end p-0 sm:p-4">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -1399,54 +1419,53 @@ export default function App() {
               className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
             />
             
-            {/* Bottom Sheet Box */}
+            {/* Bottom Sheet Box (Adaptive card for tablets) */}
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 240 }}
-              className="relative max-h-[85vh] bg-white dark:bg-slate-900 rounded-t-[2.2rem] border-t border-slate-200 dark:border-slate-850 flex flex-col overflow-hidden shadow-2xl z-10"
+              className="relative w-full max-w-full sm:max-w-xl sm:mx-auto md:max-w-2xl h-[85vh] max-h-[85vh] bg-white dark:bg-slate-900 rounded-t-[2.2rem] sm:rounded-b-[2.2rem] border-t sm:border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden shadow-2xl z-10"
             >
               {/* Pull handle indicator */}
               <div className="w-12 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto my-3 shrink-0" />
               
               {/* Header inside sheet */}
-              <div className="flex justify-between items-center px-5 mb-2 shrink-0">
-                <h3 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5 text-red-600" />
-                  Riwayat Keranjang
+              <div className="flex justify-between items-center px-6 mb-2 shrink-0">
+                <h3 className="text-base font-black text-slate-855 dark:text-slate-100 flex items-center gap-2 uppercase tracking-wide">
+                  <ShoppingBag className="w-5 h-5 text-red-655" />
+                  Detail Keranjang
                 </h3>
                 <button 
                   onClick={() => setShowMobileCart(false)}
-                  className="p-1 px-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-[11px] font-extrabold text-slate-500 hover:text-slate-800"
+                  className="p-1 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 transition-all rounded-xl text-[11px] font-black uppercase text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
                 >
                   Tutup
                 </button>
               </div>
 
-              {/* Scrollable Cart Content */}
-              <div className="flex-1 overflow-y-auto px-4 pb-8 scroll-smooth overscroll-contain">
-                <div className="bg-slate-150/10 dark:bg-slate-950/20 rounded-2xl">
-                  <Cart 
-                    items={cart} 
-                    taxRate={storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 0) : 0}
-                    discount={discount}
-                    vouchers={vouchers}
-                    appliedVoucherCode={appliedVoucherCode}
-                    onUpdateQuantity={updateCartQuantity}
-                    onRemove={removeFromCart}
-                    onCheckout={() => {
-                      setShowMobileCart(false);
-                      setShowPayment(true);
-                    }}
-                    onAddManual={handleAddManual}
-                    onUpdateDiscount={setDiscount}
-                    onApplyVoucher={setAppliedVoucherCode}
-                    clients={customers}
-                    selectedClientId={selectedClientIdForCart}
-                    onSelectClient={setSelectedClientIdForCart}
-                  />
-                </div>
+              {/* Scrollable Cart Content - rendered 100% full height of viewport container */}
+              <div className="flex-1 min-h-0 h-full">
+                <Cart 
+                  items={cart} 
+                  taxRate={storeSettings?.taxEnabled !== false ? (storeSettings?.taxRate || 0) : 0}
+                  discount={discount}
+                  vouchers={vouchers}
+                  appliedVoucherCode={appliedVoucherCode}
+                  onUpdateQuantity={updateCartQuantity}
+                  onRemove={removeFromCart}
+                  onCheckout={() => {
+                    setShowMobileCart(false);
+                    setShowPayment(true);
+                  }}
+                  onAddManual={handleAddManual}
+                  onUpdateDiscount={setDiscount}
+                  onApplyVoucher={setAppliedVoucherCode}
+                  clients={customers}
+                  selectedClientId={selectedClientIdForCart}
+                  onSelectClient={setSelectedClientIdForCart}
+                  isOverlay={true}
+                />
               </div>
             </motion.div>
           </div>
