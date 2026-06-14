@@ -154,54 +154,56 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
   }, [filteredTransactions, period]);
 
   return (
-    <div className="p-4 sm:p-8 pb-40 md:pb-12">
+    <div className="p-4 sm:p-8 pb-40 md:pb-12 text-slate-800 dark:text-slate-100">
       <div className="mb-8 md:mb-12 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold flex items-center gap-2 uppercase tracking-tight">
-            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-red-600" />
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold flex items-center gap-2 uppercase tracking-tight text-slate-900 dark:text-white">
+            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-red-600 dark:text-red-500" />
             Laporan Keuntungan
           </h1>
-          <p className="text-[10px] sm:text-xs md:text-sm text-slate-500 font-bold uppercase tracking-widest mt-1">Analisis Performa Bisnis Berkala</p>
+          <p className="text-[10px] sm:text-xs md:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mt-1">Analisis Performa Bisnis Berkala</p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-          <div className="bg-slate-100 p-1 rounded-2xl flex gap-1 justify-center sm:justify-start">
+          <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl flex gap-1 justify-center sm:justify-start">
             <button 
               onClick={() => setPeriod('daily')}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${period === 'daily' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${period === 'daily' ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
               Harian
             </button>
             <button 
               onClick={() => setPeriod('weekly')}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${period === 'weekly' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${period === 'weekly' ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
               Mingguan
             </button>
             <button 
               onClick={() => setPeriod('monthly')}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${period === 'monthly' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${period === 'monthly' ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
               Bulanan
             </button>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button 
               onClick={() => exportTransactionsToCSV(filteredTransactions)}
               disabled={filteredTransactions.length === 0}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-slate-800 text-white rounded-2xl font-bold hover:bg-slate-900 transition-all text-sm shadow-xl shadow-slate-100 disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none"
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-800 dark:bg-slate-705 border border-slate-700/50 text-white rounded-2xl font-bold hover:bg-slate-900 dark:hover:bg-slate-600 transition-all text-xs shadow-xl shadow-slate-100/10 disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none"
+              title="Ekspor Laporan dalam Format Excel/CSV"
             >
               <Download className="w-4 h-4" />
-              CSV
+              <span>Ekspor CSV</span>
             </button>
             <button 
               onClick={() => exportTransactionsToPDF(filteredTransactions, storeSettings, period)}
               disabled={filteredTransactions.length === 0}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all text-sm shadow-xl shadow-red-100 disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none"
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all text-xs shadow-xl shadow-red-100/20 disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none border border-red-500"
+              title="Unduh Laporan Keuangan Formal PDF Resmi"
             >
               <FileText className="w-4 h-4" />
-              PDF
+              <span>Cetak PDF Laporan Resmi</span>
             </button>
           </div>
         </div>
@@ -241,11 +243,11 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mb-8">
-        <div className="lg:col-span-2 bg-white p-5 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-5 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between mb-6 sm:mb-8 text-center sm:text-left">
             <div>
-              <h2 className="text-lg sm:text-xl font-bold">Analisis Keuntungan</h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Laba Kotor vs Bersih ({period})</p>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100">Analisis Keuntungan</h2>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">Laba Kotor vs Bersih ({period})</p>
             </div>
           </div>
           <div className="h-48 sm:h-80 w-full overflow-hidden">
@@ -291,7 +293,7 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-700">
                 <Activity className="w-12 h-12 mb-2 opacity-20" />
                 <p className="text-[10px] font-bold uppercase tracking-widest">Belum ada data visual</p>
               </div>
@@ -299,36 +301,36 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
           </div>
         </div>
 
-        <div className="bg-white p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col">
+        <div className="bg-white dark:bg-slate-900 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col">
           <div className="mb-5 sm:mb-6 text-center lg:text-left">
-            <h2 className="text-lg sm:text-xl font-bold">Ringkasan QR</h2>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Performa Pembayaran QR</p>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100">Ringkasan QR</h2>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">Performa Pembayaran QR</p>
           </div>
           
           <div className="flex-1 space-y-5 sm:space-y-6">
-             <div className="p-5 sm:p-6 bg-blue-50 rounded-[2rem] border border-blue-100 text-center lg:text-left">
+             <div className="p-5 sm:p-6 bg-blue-50 dark:bg-blue-950/20 rounded-[2rem] border border-blue-100 dark:border-blue-900/30 text-center lg:text-left">
                 <div className="flex flex-col lg:flex-row items-center gap-2 sm:gap-3 mb-2">
-                   <div className="p-2 bg-white rounded-lg text-blue-600 hidden lg:block">
+                   <div className="p-2 bg-white dark:bg-slate-800 rounded-lg text-blue-600 dark:text-blue-400 hidden lg:block">
                       <QrCode size={16} />
                    </div>
-                   <span className="text-[9px] sm:text-[10px] font-black text-blue-400 uppercase tracking-widest">Total Transaksi QR</span>
+                   <span className="text-[9px] sm:text-[10px] font-black text-blue-400 dark:text-blue-505 uppercase tracking-widest">Total Transaksi QR</span>
                 </div>
-                <p className="text-xl sm:text-2xl font-black text-blue-700">{formatCurrency(qrStats.totalQR)}</p>
-                <p className="text-[9px] sm:text-[10px] font-bold text-blue-400 mt-1 uppercase tracking-tight">{qrStats.countQR} Transaksi Sukses</p>
+                <p className="text-xl sm:text-2xl font-black text-blue-700 dark:text-blue-400">{formatCurrency(qrStats.totalQR)}</p>
+                <p className="text-[9px] sm:text-[10px] font-bold text-blue-400 dark:text-blue-500 mt-1 uppercase tracking-tight">{qrStats.countQR} Transaksi Sukses</p>
              </div>
 
              <div className="space-y-3 sm:space-y-4">
-                <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 text-center lg:text-left">Berdasarkan Penyedia</p>
+                <p className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-550 uppercase tracking-widest px-1 text-center lg:text-left">Berdasarkan Penyedia</p>
                 <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 sm:gap-3 lg:overflow-visible scrollbar-hide pr-1 pb-2">
                    {Object.entries(qrStats.byProvider).map(([provider, amount]) => (
-                     <div key={provider} className="flex flex-col lg:flex-row items-center lg:justify-between p-2.5 sm:p-3 bg-slate-50 rounded-2xl border border-transparent hover:border-slate-100 text-center lg:text-left">
+                     <div key={provider} className="flex flex-col lg:flex-row items-center lg:justify-between p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-transparent hover:border-slate-105 dark:hover:border-slate-800 text-center lg:text-left">
                         <div className="flex flex-col lg:flex-row items-center gap-1.5 lg:gap-3 mb-1.5 lg:mb-0">
-                           <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-slate-400 hidden lg:flex">
+                           <div className="w-7 h-7 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-slate-450 dark:text-slate-500 hidden lg:flex">
                               <Target size={12} />
                            </div>
-                           <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight truncate max-w-full">{provider}</span>
+                           <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-tight truncate max-w-full">{provider}</span>
                         </div>
-                        <span className="text-[10px] sm:text-xs font-black text-slate-800">{formatCurrency(amount as number)}</span>
+                        <span className="text-[10px] sm:text-xs font-black text-slate-800 dark:text-white">{formatCurrency(amount as number)}</span>
                      </div>
                    ))}
                    {Object.keys(qrStats.byProvider).length === 0 && (
@@ -376,28 +378,28 @@ export default function TransactionHistory({ transactions, storeSettings, isOnli
         <div className="bg-white p-5 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-6 sm:mb-8 text-center sm:text-left">
             <div>
-              <h2 className="text-lg sm:text-xl font-bold">Riwayat {period === 'daily' ? 'Hari Ini' : 'Periode Ini'}</h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-tight">Transaksi sukses ({period})</p>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100">Riwayat {period === 'daily' ? 'Hari Ini' : 'Periode Ini'}</h2>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest leading-tight">Transaksi sukses ({period})</p>
             </div>
-            <div className="hidden sm:block p-2 bg-slate-50 border border-slate-100 rounded-xl">
-              <Calendar className="w-5 h-5 text-slate-400" />
+            <div className="hidden sm:block p-2 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl">
+              <Calendar className="w-5 h-5 text-slate-400 dark:text-slate-500" />
             </div>
           </div>
           
           <div className="space-y-3 lg:overflow-visible scrollbar-hide pr-1">
             {[...filteredTransactions].reverse().map((t) => (
-              <div key={t.id} className="flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-slate-50 border border-transparent hover:border-slate-100 transition-all group">
+              <div key={t.id} className="flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-transparent hover:border-slate-100 dark:hover:border-slate-700 transition-all group">
                 <div className="flex items-center gap-2 md:gap-4">
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white flex items-center justify-center font-bold text-[10px] md:text-xs shadow-sm group-hover:scale-110 transition-transform shrink-0">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center font-bold text-[10px] md:text-xs shadow-sm text-slate-800 dark:text-slate-100 group-hover:scale-110 transition-transform shrink-0">
                     {t.paymentMethod?.[0] || 'P'}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1 md:gap-2">
-                      <div className="font-bold text-xs md:text-sm truncate">#{t.id.slice(-6)}</div>
+                      <div className="font-bold text-xs md:text-sm truncate text-slate-800 dark:text-slate-100">#{t.id.slice(-6)}</div>
                       <span className={`px-1 py-0.5 rounded text-[7px] md:text-[8px] font-black uppercase tracking-tighter shrink-0 ${
-                        t.status === 'success' ? 'bg-green-50 text-green-600' :
-                        t.status === 'pending' ? 'bg-amber-50 text-amber-600' :
-                        'bg-red-50 text-red-600'
+                        t.status === 'success' ? 'bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400' :
+                        t.status === 'pending' ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400' :
+                        'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400'
                       }`}>
                         {t.status}
                       </span>
